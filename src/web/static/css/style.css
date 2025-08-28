@@ -92,6 +92,143 @@ html {
     scroll-padding-top: 80px; /* 为固定导航栏留出空间 */
 }
 
+/* 文件上传相关样式 */
+.file-drop-zone {
+    border: 2px dashed var(--medium-gray);
+    border-radius: var(--radius-lg);
+    padding: 2rem;
+    text-align: center;
+    background: var(--light-color);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.file-drop-zone:hover {
+    border-color: var(--primary-color);
+    background: var(--primary-gradient);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.file-drop-zone.dragover {
+    border-color: var(--primary-color);
+    background: var(--primary-gradient);
+    transform: scale(1.02);
+    box-shadow: var(--shadow-lg);
+}
+
+.file-drop-content {
+    pointer-events: none;
+}
+
+.file-drop-zone input[type="file"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 10;
+}
+
+.content-preview {
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--light-gray);
+    border: 1px solid var(--medium-gray);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.sections-list {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--medium-gray);
+    border-radius: var(--radius-sm);
+    background: var(--light-color);
+}
+
+.section-item {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--medium-gray);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.section-item:hover {
+    background: var(--light-gray);
+}
+
+.section-item:last-child {
+    border-bottom: none;
+}
+
+.section-item.selected {
+    background: var(--primary-gradient);
+    color: white;
+}
+
+.section-item .section-preview {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-info-card {
+    border: 1px solid var(--medium-gray);
+    border-radius: var(--radius-md);
+    background: var(--light-color);
+    transition: all 0.3s ease;
+}
+
+.file-info-card:hover {
+    box-shadow: var(--shadow-sm);
+}
+
+.file-upload-progress {
+    height: 4px;
+    background: var(--light-gray);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+}
+
+.file-upload-progress-bar {
+    height: 100%;
+    background: var(--primary-gradient);
+    transition: width 0.3s ease;
+}
+
+.file-upload-status {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.file-upload-status.success {
+    color: var(--success-color);
+}
+
+.file-upload-status.error {
+    color: var(--danger-color);
+}
+
+.file-upload-status.warning {
+    color: var(--warning-color);
+}
+
 /* 导航栏样式 */
 .navbar {
     background: var(--primary-gradient) !important;

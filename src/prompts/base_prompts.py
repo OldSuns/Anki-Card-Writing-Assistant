@@ -163,9 +163,11 @@ class BasePromptManager:
                 return content
         
         # 4) 全局默认（预加载）
-        if prompt_type not in self.prompts:
-            raise ValueError(f"未找到提示词类型: {prompt_type}")
-        return self.prompts[prompt_type].template
+        if prompt_type in self.prompts:
+            return self.prompts[prompt_type].template
+        
+        # 5) 如果都不存在，抛出错误
+        raise ValueError(f"未找到提示词类型: {prompt_type}")
     
     def _read_prompt_file(self, file_path: Path, description: str) -> Optional[str]:
         """读取提示词文件"""
@@ -197,9 +199,33 @@ class BasePromptManager:
         """列出提示词名称（用于显示）；支持按模板过滤。"""
         keys = self.list_prompts(category=category, language=language, template_name=template_name)
         names: List[str] = []
+        
+        # 基础提示词配置（元数据）用于名称映射
+        base_prompts_config = {
+            "cloze": {
+                "name": "填空卡片",
+                "description": "生成填空类型的记忆卡片",
+                "language": "zh-CN",
+                "difficulty": "medium",
+                "category": "cloze",
+                "variables": ["card_count", "template_name", "content"]
+            },
+            "multiple_choice": {
+                "name": "选择题卡片",
+                "description": "生成包含选项与解析的选择题卡片（支持多选）",
+                "language": "zh-CN",
+                "difficulty": "medium",
+                "category": "standard",
+                "variables": ["card_count", "template_name", "content"]
+            }
+        }
+        
         for key in keys:
             if key in self.prompts:
                 names.append(self.prompts[key].name)
+            elif key in base_prompts_config:
+                # 使用基础配置中的名称
+                names.append(base_prompts_config[key]["name"])
             else:
                 # 若未在全局预加载（极少），回退显示键名
                 names.append(key)

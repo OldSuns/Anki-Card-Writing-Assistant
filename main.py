@@ -16,6 +16,7 @@ from src.core.anki_exporter import AnkiExporter
 from src.templates.template_manager import TemplateManager
 from src.prompts.base_prompts import BasePromptManager
 from src.utils.config_manager import ConfigManager
+from src.utils.file_processor import FileProcessor
 
 class AnkiCardAssistant:
     """Anki写卡助手主类"""
@@ -40,6 +41,7 @@ class AnkiCardAssistant:
         self.llm_manager = LLMManager()
         self.template_manager = TemplateManager(self.config["templates"]["directory"])
         self.prompt_manager = BasePromptManager("src/prompts")
+        self.file_processor = FileProcessor()
         self.card_generator = CardGenerator(
             self.llm_manager,
             self.template_manager,

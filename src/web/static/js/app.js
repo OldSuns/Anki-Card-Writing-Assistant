@@ -148,6 +148,23 @@ class AnkiCardAssistant {
         this.modals.historyDetail = new bootstrap.Modal(document.getElementById('history-detail-modal'));
         this.elements.historyLoading = document.getElementById('history-loading');
         this.elements.historyList = document.getElementById('history-list');
+        
+        // 文件上传相关元素
+        this.elements.textInputRadio = document.getElementById('text-input');
+        this.elements.fileInputRadio = document.getElementById('file-input');
+        this.elements.textInputArea = document.getElementById('text-input-area');
+        this.elements.fileInputArea = document.getElementById('file-input-area');
+        this.elements.fileDropZone = document.getElementById('file-drop-zone');
+        this.elements.fileInput = document.getElementById('file-upload-input');
+        this.elements.fileInfo = document.getElementById('file-info');
+        this.elements.fileName = document.getElementById('file-name');
+        this.elements.fileDetails = document.getElementById('file-details');
+        this.elements.fileWarnings = document.getElementById('file-warnings');
+        this.elements.removeFile = document.getElementById('remove-file');
+        this.elements.contentPreview = document.getElementById('content-preview');
+        this.elements.sectionsSelection = document.getElementById('sections-selection');
+        this.elements.selectAllSections = document.getElementById('select-all-sections');
+        this.elements.sectionsList = document.getElementById('sections-list');
         this.elements.historyEmpty = document.getElementById('history-empty');
         this.elements.historyRecords = document.getElementById('history-records');
         this.elements.historyCount = document.getElementById('history-count');
@@ -179,6 +196,15 @@ class AnkiCardAssistant {
             defaultOption.textContent = '请选择...';
             this.elements.promptSelect.appendChild(defaultOption);
         }
+
+        // 调试信息：检查文件上传相关元素是否正确缓存
+        console.log('文件上传元素缓存状态:');
+        console.log('textInputRadio:', this.elements.textInputRadio);
+        console.log('fileInputRadio:', this.elements.fileInputRadio);
+        console.log('textInputArea:', this.elements.textInputArea);
+        console.log('fileInputArea:', this.elements.fileInputArea);
+        console.log('fileInput:', this.elements.fileInput);
+        console.log('fileDropZone:', this.elements.fileDropZone);
     }
 
     initSocket() {
@@ -333,6 +359,9 @@ class AnkiCardAssistant {
             this.exportApkg();
         });
 
+        // 文件上传相关事件
+        this.initFileUploadListeners();
+
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
             this.handleKeyboardShortcuts(e);
@@ -448,17 +477,9 @@ class AnkiCardAssistant {
         }
     }
 
-    generateCards() {
+    async generateCards() {
         if (this.isGenerating) {
             this.showToast('warning', '正在生成中，请等待...');
-            return;
-        }
-
-        const content = this.elements.contentInput?.value.trim();
-        
-        if (!content) {
-            this.showStatus('请输入内容', 'warning');
-            this.showToast('warning', '请输入内容');
             return;
         }
 
@@ -473,25 +494,13 @@ class AnkiCardAssistant {
             return;
         }
 
-        this.isGenerating = true;
-        this.showGenerateButton(true);
-        this.showProgress(true);
+        const inputMethod = document.querySelector('input[name="input-method"]:checked')?.value || 'text';
         
-        // 开始生成时清除保存的滚动位置
-        this.clearScrollPosition();
-
-        const formData = {
-            content: content,
-            template: this.elements.templateSelect.value,
-            prompt_type: this.promptNameToKey[this.elements.promptSelect.value] || this.elements.promptSelect.value,
-            language: 'zh-CN',
-            difficulty: this.elements.difficultySelect.value,
-            card_count: parseInt(this.elements.cardCount.value),
-            export_formats: this.getSelectedExportFormats(),
-            deck_name: this.elements.deckNameInput?.value.trim() || null
-        };
-
-        this.socket.emit('generate_cards', formData);
+        if (inputMethod === 'file') {
+            await this.generateFromFile();
+        } else {
+            await this.generateFromText();
+        }
     }
 
 
@@ -1942,6 +1951,338 @@ class AnkiCardAssistant {
             sessionStorage.removeItem('ankiAssistant_scrollPosition');
         } catch (error) {
             console.warn('清除滚动位置失败:', error);
+        }
+    }
+
+    // 文件上传相关方法
+    initFileUploadListeners() {
+        // 输入方式切换
+        this.elements.textInputRadio?.addEventListener('change', () => {
+            this.switchToTextInput();
+        });
+
+        this.elements.fileInputRadio?.addEventListener('change', () => {
+            this.switchToFileInput();
+        });
+
+        // 文件拖拽事件
+        this.elements.fileDropZone?.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            this.elements.fileDropZone.classList.add('dragover');
+        });
+
+        this.elements.fileDropZone?.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            this.elements.fileDropZone.classList.remove('dragover');
+        });
+
+        this.elements.fileDropZone?.addEventListener('drop', (e) => {
+            e.preventDefault();
+            this.elements.fileDropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                this.handleFileUpload(files[0]);
+            }
+        });
+
+        // 文件选择事件
+        this.elements.fileInput?.addEventListener('change', (e) => {
+            console.log('文件选择事件触发，文件数量:', e.target.files.length);
+            if (e.target.files.length > 0) {
+                console.log('选择的文件:', e.target.files[0].name);
+                this.handleFileUpload(e.target.files[0]);
+            }
+        });
+
+        // 点击整个区域触发文件选择
+        this.elements.fileDropZone?.addEventListener('click', (e) => {
+            // 如果点击的不是文件输入框本身，则触发文件选择
+            if (e.target !== this.elements.fileInput) {
+                this.elements.fileInput?.click();
+            }
+        });
+
+        // 移除文件
+        this.elements.removeFile?.addEventListener('click', () => {
+            this.removeUploadedFile();
+        });
+
+        // 全选章节
+        this.elements.selectAllSections?.addEventListener('change', () => {
+            this.toggleAllSections();
+        });
+    }
+
+    // 切换到文本输入
+    switchToTextInput() {
+        this.elements.textInputArea.style.display = 'block';
+        this.elements.fileInputArea.style.display = 'none';
+        this.clearUploadedFile();
+    }
+
+    // 切换到文件输入
+    switchToFileInput() {
+        console.log('切换到文件输入模式');
+        this.elements.textInputArea.style.display = 'none';
+        this.elements.fileInputArea.style.display = 'block';
+        this.elements.contentInput.value = '';
+        console.log('文件输入区域显示状态:', this.elements.fileInputArea.style.display);
+    }
+
+    // 处理文件上传
+    async handleFileUpload(file) {
+        try {
+            // 显示加载状态
+            this.showFileUploadStatus('正在上传文件...', 'info');
+
+            // 创建FormData
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // 上传文件
+            const response = await fetch('/api/upload-file', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                this.displayFileInfo(result.data);
+                this.showFileUploadStatus('文件上传成功', 'success');
+            } else {
+                this.showFileUploadStatus(`上传失败: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('文件上传失败:', error);
+            this.showFileUploadStatus('文件上传失败，请重试', 'error');
+        }
+    }
+
+    // 显示文件信息
+    displayFileInfo(data) {
+        const { file_info, sections, warnings } = data;
+
+        // 显示文件信息
+        this.elements.fileName.textContent = file_info.filename;
+        this.elements.fileDetails.textContent = 
+            `大小: ${this.formatFileSize(file_info.file_size)} | ` +
+            `行数: ${file_info.total_lines} | ` +
+            `字数: ${file_info.total_words} | ` +
+            `章节: ${sections.length}`;
+
+        // 显示警告信息
+        if (warnings && warnings.length > 0) {
+            this.elements.fileWarnings.innerHTML = warnings.map(warning => 
+                `<i class="fas fa-exclamation-triangle me-1"></i>${warning}`
+            ).join('<br>');
+        } else {
+            this.elements.fileWarnings.innerHTML = '';
+        }
+
+        // 显示内容预览
+        this.elements.contentPreview.textContent = file_info.content_preview;
+
+        // 显示章节选择（如果有多个章节）
+        if (sections.length > 1) {
+            this.displaySectionsList(sections);
+            this.elements.sectionsSelection.style.display = 'block';
+        } else {
+            this.elements.sectionsSelection.style.display = 'none';
+        }
+
+        // 显示文件信息区域
+        this.elements.fileInfo.style.display = 'block';
+
+        // 保存文件数据
+        this.currentFileData = data;
+    }
+
+    // 显示章节列表
+    displaySectionsList(sections) {
+        this.elements.sectionsList.innerHTML = '';
+        
+        sections.forEach((section, index) => {
+            const sectionDiv = document.createElement('div');
+            sectionDiv.className = 'section-item';
+            sectionDiv.innerHTML = `
+                <div class="form-check">
+                    <input class="form-check-input section-checkbox" type="checkbox" 
+                           value="${index}" id="section-${index}" checked>
+                    <label class="form-check-label" for="section-${index}">
+                        章节 ${index + 1}
+                    </label>
+                </div>
+                <div class="section-preview">${this.truncateText(section, 100)}</div>
+            `;
+            this.elements.sectionsList.appendChild(sectionDiv);
+        });
+    }
+
+    // 切换全选章节
+    toggleAllSections() {
+        const checkboxes = this.elements.sectionsList.querySelectorAll('.section-checkbox');
+        const selectAll = this.elements.selectAllSections.checked;
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAll;
+        });
+    }
+
+    // 移除上传的文件
+    removeUploadedFile() {
+        this.clearUploadedFile();
+        this.elements.fileInput.value = '';
+    }
+
+    // 清除上传的文件
+    clearUploadedFile() {
+        this.elements.fileInfo.style.display = 'none';
+        this.elements.sectionsSelection.style.display = 'none';
+        this.elements.contentPreview.textContent = '';
+        this.elements.fileWarnings.innerHTML = '';
+        this.currentFileData = null;
+    }
+
+    // 显示文件上传状态
+    showFileUploadStatus(message, type = 'info') {
+        // 显示状态消息
+        this.showStatus(message, type);
+        
+        // 如果是错误状态，显示错误提示
+        if (type === 'error') {
+            this.showToast('error', message);
+        } else if (type === 'success') {
+            this.showToast('success', message);
+        }
+        
+        console.log(`文件上传状态: ${message} (${type})`);
+    }
+
+    // 格式化文件大小
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // 截断文本
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
+
+
+    // 从文本生成卡片
+    async generateFromText() {
+        const content = this.elements.contentInput.value.trim();
+        if (!content) {
+            this.showToast('error', '请输入内容');
+            return;
+        }
+
+        // 原有的生成逻辑
+        await this.performCardGeneration({
+            content: content,
+            template: this.elements.templateSelect.value,
+            prompt_type: this.elements.promptSelect.value,
+            card_count: parseInt(this.elements.cardCount.value),
+            deck_name: this.elements.deckNameInput.value,
+            difficulty: this.elements.difficultySelect.value,
+            export_formats: this.getSelectedExportFormats()
+        });
+    }
+
+    // 从文件生成卡片
+    async generateFromFile() {
+        if (!this.currentFileData) {
+            this.showToast('error', '请先上传文件');
+            return;
+        }
+
+        // 获取选中的章节
+        const selectedSections = [];
+        const checkboxes = this.elements.sectionsList.querySelectorAll('.section-checkbox:checked');
+        checkboxes.forEach(checkbox => {
+            selectedSections.push(parseInt(checkbox.value));
+        });
+
+        if (selectedSections.length === 0) {
+            this.showToast('error', '请选择至少一个章节');
+            return;
+        }
+
+        await this.performCardGeneration({
+            temp_file_path: this.currentFileData.temp_file_path,
+            selected_sections: selectedSections,
+            template: this.elements.templateSelect.value,
+            prompt_type: this.elements.promptSelect.value,
+            card_count: parseInt(this.elements.cardCount.value),
+            deck_name: this.elements.deckNameInput.value,
+            difficulty: this.elements.difficultySelect.value,
+            export_formats: this.getSelectedExportFormats()
+        }, '/api/generate-from-file');
+    }
+
+    // 处理生成错误
+    handleGenerationError(error) {
+        this.showStatus(error, 'danger');
+        this.showToast('error', error);
+        this.resetGenerateButton();
+    }
+
+    // 执行卡片生成
+    async performCardGeneration(data, endpoint = '/api/generate') {
+        try {
+            this.isGenerating = true;
+            this.showGenerateButton(true);
+            this.showProgress(true);
+            
+            // 开始生成时清除保存的滚动位置
+            this.clearScrollPosition();
+
+            if (endpoint === '/api/generate-from-file') {
+                // 使用HTTP API进行文件生成
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    this.displayResults(result.data);
+                } else {
+                    this.handleGenerationError(result.error);
+                }
+            } else {
+                // 使用Socket进行文本生成
+                const formData = {
+                    content: data.content,
+                    template: data.template,
+                    prompt_type: this.promptNameToKey[data.prompt_type] || data.prompt_type,
+                    language: 'zh-CN',
+                    difficulty: data.difficulty,
+                    card_count: data.card_count,
+                    export_formats: data.export_formats,
+                    deck_name: data.deck_name
+                };
+
+                this.socket.emit('generate_cards', formData);
+            }
+        } catch (error) {
+            console.error('生成卡片失败:', error);
+            this.handleGenerationError('网络错误，请检查连接后重试');
+        } finally {
+            this.isGenerating = false;
+            this.showGenerateButton(false);
+            this.showProgress(false);
         }
     }
 }

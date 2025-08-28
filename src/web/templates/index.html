@@ -67,8 +67,23 @@
                         </div>
                         <div class="card-body">
                             <form id="generation-form">
-                                <!-- 内容输入 -->
-                                <div class="mb-4">
+                                <!-- 内容输入方式选择 -->
+                                <div class="mb-3">
+                                    <div class="btn-group w-100" role="group" aria-label="内容输入方式">
+                                        <input type="radio" class="btn-check" name="input-method" id="text-input" value="text" checked>
+                                        <label class="btn btn-outline-primary" for="text-input">
+                                            <i class="fas fa-edit me-2"></i>文本输入
+                                        </label>
+                                        
+                                        <input type="radio" class="btn-check" name="input-method" id="file-input" value="file">
+                                        <label class="btn btn-outline-primary" for="file-input">
+                                            <i class="fas fa-file-upload me-2"></i>文件上传
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- 文本输入区域 -->
+                                <div id="text-input-area" class="mb-4">
                                     <label for="content-input" class="form-label">
                                         <i class="fas fa-edit me-2"></i>输入内容
                                     </label>
@@ -76,6 +91,59 @@
                                               placeholder="请输入要生成卡片的内容...&#10;支持纯文本、Markdown格式&#10;&#10;示例：&#10;- 学习要点1&#10;- 学习要点2&#10;- 重要概念解释"></textarea>
                                     <div class="form-text">
                                         <small class="text-muted">支持纯文本和Markdown格式，内容越详细，生成的卡片质量越高</small>
+                                    </div>
+                                </div>
+
+                                <!-- 文件上传区域 -->
+                                <div id="file-input-area" class="mb-4" style="display: none;">
+                                    <label class="form-label">
+                                        <i class="fas fa-file-upload me-2"></i>上传文件
+                                    </label>
+                                    
+                                    <!-- 文件拖拽区域 -->
+                                    <div class="file-drop-zone" id="file-drop-zone">
+                                        <div class="file-drop-content">
+                                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                            <h5>拖拽文件到此处或点击选择</h5>
+                                            <p class="text-muted">支持 .txt, .md, .docx, .pdf, .csv, .xlsx, .xls 格式</p>
+                                            <input type="file" id="file-upload-input" accept=".txt,.md,.docx,.pdf,.csv,.xlsx,.xls" style="display: none;">
+                                        </div>
+                                    </div>
+
+                                    <!-- 文件信息显示 -->
+                                    <div id="file-info" class="mt-3" style="display: none;">
+                                        <div class="card">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-start">
+                                                    <div>
+                                                        <h6 class="card-title mb-1" id="file-name"></h6>
+                                                        <p class="card-text text-muted mb-2" id="file-details"></p>
+                                                        <div id="file-warnings" class="text-warning"></div>
+                                                    </div>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" id="remove-file">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                </div>
+                                                
+                                                <!-- 文件内容预览 -->
+                                                <div class="mt-3">
+                                                    <h6>内容预览</h6>
+                                                    <div class="content-preview" id="content-preview"></div>
+                                                </div>
+                                                
+                                                <!-- 章节选择 -->
+                                                <div class="mt-3" id="sections-selection" style="display: none;">
+                                                    <h6>选择要处理的章节</h6>
+                                                    <div class="form-check">
+                                                        <input class="form-check-input" type="checkbox" id="select-all-sections">
+                                                        <label class="form-check-label" for="select-all-sections">
+                                                            全选所有章节
+                                                        </label>
+                                                    </div>
+                                                    <div id="sections-list" class="mt-2"></div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

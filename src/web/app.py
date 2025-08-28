@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional, Dict, Any
 
@@ -13,6 +15,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.core.card_generator import GenerationConfig
+from src.utils.file_processor import FileProcessor
 
 class WebApp:
     """Web应用类"""
@@ -26,6 +29,13 @@ class WebApp:
         # 使用传入的助手实例
         self.assistant = assistant
         self.logger = logging.getLogger(__name__)
+        
+        # 初始化文件处理器
+        self.file_processor = FileProcessor()
+        
+        # 创建临时文件目录
+        self.temp_dir = Path(tempfile.gettempdir()) / "anki_card_assistant"
+        self.temp_dir.mkdir(exist_ok=True)
         
         # 注册路由
         self._register_routes()
@@ -310,6 +320,172 @@ class WebApp:
                 
             except Exception as e:
                 self.logger.error(f"生成卡片失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @self.app.route('/api/upload-file', methods=['POST'])
+        def upload_file():
+            """上传文件"""
+            try:
+                if 'file' not in request.files:
+                    return jsonify({
+                        'success': False,
+                        'error': '没有选择文件'
+                    }), 400
+                
+                file = request.files['file']
+                if file.filename == '':
+                    return jsonify({
+                        'success': False,
+                        'error': '没有选择文件'
+                    }), 400
+                
+                # 检查文件类型
+                if not self.file_processor.is_supported_file(file.filename):
+                    supported_extensions = self.file_processor.get_supported_extensions()
+                    return jsonify({
+                        'success': False,
+                        'error': f'不支持的文件类型。支持的类型: {", ".join(supported_extensions)}'
+                    }), 400
+                
+                # 保存文件到临时目录
+                temp_file_path = self.temp_dir / file.filename
+                file.save(temp_file_path)
+                
+                # 验证文件
+                validation_result = self.file_processor.validate_file(str(temp_file_path))
+                if not validation_result['valid']:
+                    # 删除临时文件
+                    temp_file_path.unlink(missing_ok=True)
+                    return jsonify({
+                        'success': False,
+                        'error': f'文件验证失败: {", ".join(validation_result["errors"])}',
+                        'warnings': validation_result.get('warnings', [])
+                    }), 400
+                
+                # 处理文件
+                processed_content = self.file_processor.process_file(str(temp_file_path))
+                
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'file_info': {
+                            'filename': processed_content.original_file.filename,
+                            'file_size': processed_content.original_file.file_size,
+                            'file_type': processed_content.original_file.file_type,
+                            'total_lines': processed_content.original_file.total_lines,
+                            'total_words': processed_content.original_file.total_words,
+                            'content_preview': processed_content.original_file.content_preview
+                        },
+                        'sections': processed_content.sections,
+                        'section_count': len(processed_content.sections),
+                        'temp_file_path': str(temp_file_path),
+                        'warnings': validation_result.get('warnings', [])
+                    }
+                })
+                
+            except Exception as e:
+                self.logger.error(f"文件上传失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @self.app.route('/api/generate-from-file', methods=['POST'])
+        def generate_from_file():
+            """从文件生成卡片"""
+            try:
+                data = request.get_json()
+                temp_file_path = data.get('temp_file_path')
+                selected_sections = data.get('selected_sections', [])  # 用户选择的章节
+                
+                if not temp_file_path or not Path(temp_file_path).exists():
+                    return jsonify({
+                        'success': False,
+                        'error': '文件不存在或已过期'
+                    }), 400
+                
+                # 处理文件
+                processed_content = self.file_processor.process_file(temp_file_path)
+                
+                # 如果用户选择了特定章节，只处理这些章节
+                if selected_sections:
+                    sections_to_process = [processed_content.sections[i] for i in selected_sections if i < len(processed_content.sections)]
+                else:
+                    sections_to_process = processed_content.sections
+                
+                if not sections_to_process:
+                    return jsonify({
+                        'success': False,
+                        'error': '没有可处理的内容'
+                    }), 400
+                
+                # 构建生成配置
+                config = GenerationConfig(
+                    template_name=data.get('template', 'Quizify'),
+                    prompt_type=data.get('prompt_type', 'cloze'),
+                    card_count=data.get('card_count', self.assistant.config["generation"]["default_card_count"]),
+                    custom_deck_name=data.get('deck_name'),
+                    difficulty=data.get('difficulty', self.assistant.config["generation"]["default_difficulty"])
+                )
+                
+                # 合并所有章节内容
+                combined_content = '\n\n'.join(sections_to_process)
+                
+                # 异步生成卡片
+                cards = self._run_async_task(self.assistant.generate_cards(combined_content, config))
+                
+                # 导出卡片
+                export_formats = data.get('export_formats', self.assistant.config["export"]["default_formats"])
+                export_paths = self.assistant.export_cards(
+                    cards, export_formats,
+                    original_content=combined_content,
+                    generation_config={
+                        'template_name': config.template_name,
+                        'prompt_type': config.prompt_type,
+                        'card_count': config.card_count,
+                        'custom_deck_name': config.custom_deck_name,
+                        'difficulty': config.difficulty,
+                        'source_file': processed_content.original_file.filename
+                    }
+                )
+                
+                # 获取摘要
+                summary = self.assistant.get_export_summary(cards)
+                
+                # 将CardData对象转换为可JSON序列化
+                serializable_cards = [c.to_dict() if hasattr(c, 'to_dict') else c for c in cards]
+                
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'cards': serializable_cards,
+                        'export_paths': export_paths,
+                        'summary': summary,
+                        'processed_sections': len(sections_to_process)
+                    }
+                })
+                
+            except Exception as e:
+                self.logger.error(f"从文件生成卡片失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+        
+        @self.app.route('/api/supported-file-types')
+        def get_supported_file_types():
+            """获取支持的文件类型"""
+            try:
+                extensions = self.file_processor.get_supported_extensions()
+                return jsonify({
+                    'success': True,
+                    'data': extensions
+                })
+            except Exception as e:
+                self.logger.error(f"获取支持的文件类型失败: {e}")
                 return jsonify({
                     'success': False,
                     'error': str(e)
