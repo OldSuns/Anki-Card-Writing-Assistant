@@ -529,44 +529,39 @@
         } catch { }
     }
 
-    // Legacy function for backward compatibility
-    function toggleCloze(elem, displayOption) {
-        manageCloze(elem, displayOption, false, false);
-        // Quizify辅助功能
-        window.toggleExpand = function (el) {
-            const collapse = el.nextElementSibling;
-            if (collapse.style.display === "block") {
-                collapse.style.display = "none";
-                el.classList.remove("active");
-            } else {
-                collapse.style.display = "block";
-                el.classList.add("active");
-            }
+    // Quizify辅助功能
+    window.toggleExpand = function (el) {
+        const collapse = el.nextElementSibling;
+        if (collapse.style.display === "block") {
+            collapse.style.display = "none";
+            el.classList.remove("active");
+        } else {
+            collapse.style.display = "block";
+            el.classList.add("active");
         }
+    }
 
-        window.toggleReveal = function (el) {
-            const secret = el.querySelector('.secret');
-            if (secret.style.display === "inline") {
-                secret.style.display = "none";
-                el.classList.remove("active");
-            } else {
-                secret.style.display = "inline";
-                el.classList.add("active");
-            }
+    window.toggleReveal = function (el) {
+        const secret = el.querySelector('.secret');
+        if (secret.style.display === "inline") {
+            secret.style.display = "none";
+            el.classList.remove("active");
+        } else {
+            secret.style.display = "inline";
+            el.classList.add("active");
         }
+    }
 
-        window.togglePopup = function (popup, e) {
-            const comment = popup.querySelector('.comment');
-            if (comment.style.visibility === "visible") {
-                comment.style.opacity = 0;
-                comment.style.visibility = "hidden";
-            } else {
-                comment.style.visibility = "visible";
-                comment.style.opacity = 1;
-            }
-            e.stopPropagation();
+    window.togglePopup = function (popup, e) {
+        const comment = popup.querySelector('.comment');
+        if (comment.style.visibility === "visible") {
+            comment.style.opacity = 0;
+            comment.style.visibility = "hidden";
+        } else {
+            comment.style.visibility = "visible";
+            comment.style.opacity = 1;
         }
-
+        e.stopPropagation();
     }
 
     enhancedClozesMain()

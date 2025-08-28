@@ -1,8 +1,3 @@
-"""
-配置管理器模块
-负责加载和管理应用程序配置
-"""
-
 import json
 import logging
 from pathlib import Path
@@ -12,8 +7,13 @@ import os
 class ConfigManager:
     """配置管理器"""
     
-    def __init__(self, config_path: str):
-        self.config_path = Path(config_path)
+    def __init__(self, config_path: Optional[str] = None):
+        # 优先使用项目根目录的config.json，除非明确指定其他路径
+        if config_path is None:
+            self.config_path = Path("config.json")
+        else:
+            self.config_path = Path(config_path)
+        
         self.config: Dict[str, Any] = {}
         self.logger = logging.getLogger(__name__)
         self._load_config()
@@ -33,43 +33,56 @@ class ConfigManager:
             self._create_default_config()
     
     def _create_default_config(self):
-        """创建默认配置"""
+        """创建默认配置文件 - 从config.json.example复制模板"""
+        try:
+            # 尝试从config.json.example读取配置模板
+            template_config_path = Path("config.json.example")
+            if template_config_path.exists():
+                with open(template_config_path, 'r', encoding='utf-8') as f:
+                    template_config = json.load(f)
+                
+                # 创建config.json文件
+                config_json_path = Path("config.json")
+                with open(config_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(template_config, f, ensure_ascii=False, indent=2)
+                
+                # 加载到内存
+                self.config = template_config
+                self.logger.info("已从config.json.example创建并加载默认配置到config.json")
+                return
+        except Exception as e:
+            self.logger.warning(f"从config.json.example创建配置失败: {e}")
+        
+        # 如果无法从config.json.example读取，创建最基础的配置
         self.config = {
-            "app": {
-                "name": "Anki写卡助手",
-                "version": "1.0.0",
-                "description": "基于大语言模型的Anki记忆卡片生成工具"
-            },
-            "ui": {
-                "theme": "light",
-                "language": "zh-CN",
-                "window_size": {"width": 1200, "height": 800}
-            },
             "llm": {
-                "default_provider": "openai",
-                "default_model": "gpt-3.5-turbo",
+                "api_key": "",
+                "base_url": "https://api.openai.com/v1",
+                "model": "gpt-3.5-turbo",
                 "temperature": 0.7,
-                "max_tokens": 2000,
+                "max_tokens": 20000,
                 "timeout": 30
             },
             "generation": {
-                "default_template": "Quizify",
-                "default_prompt_type": "standard_qa",
-                "default_language": "zh-CN",
                 "default_difficulty": "medium",
                 "default_card_count": 1
             },
             "export": {
-                "default_formats": ["json", "csv", "html"],
+                "default_formats": ["json", "apkg"],
                 "output_directory": "output"
             },
-            "logging": {
-                "level": "INFO",
-                "file_enabled": True,
-                "file_path": "logs/app.log"
+            "templates": {
+                "directory": "Card Template"
             }
         }
-        self.logger.info("已创建默认配置")
+        
+        # 同时创建config.json文件
+        try:
+            with open("config.json", 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, ensure_ascii=False, indent=2)
+            self.logger.info("已创建基础配置文件config.json")
+        except Exception as e:
+            self.logger.error(f"创建config.json文件失败: {e}")
     
     def get_config(self) -> Dict[str, Any]:
         """获取配置"""
@@ -93,6 +106,7 @@ class ConfigManager:
         keys = key.split('.')
         config = self.config
         
+        # 创建嵌套字典结构
         for k in keys[:-1]:
             if k not in config:
                 config[k] = {}
@@ -121,12 +135,8 @@ class ConfigManager:
     def validate_config(self) -> bool:
         """验证配置"""
         required_keys = [
-            "app.name",
-            "app.version",
-            "llm.default_provider",
-            "llm.default_model",
-            "generation.default_template",
-            "generation.default_prompt_type"
+            "llm.api_key",
+            "llm.model"
         ]
         
         for key in required_keys:
@@ -160,8 +170,9 @@ class ConfigManager:
             self.logger.error(f"保存API密钥配置失败: {e}")
             raise
     
-    def get_user_config_dir(self) -> Path:
-        """获取用户配置目录"""
+    @staticmethod
+    def get_user_config_dir() -> Path:
+        """获取用户配置目录（静态方法，不触发配置文件加载）"""
         if os.name == 'nt':  # Windows
             config_dir = Path.home() / "AppData" / "Local" / "AnkiCardAssistant"
         elif os.name == 'posix':  # macOS/Linux
@@ -172,8 +183,9 @@ class ConfigManager:
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir
     
-    def get_user_data_dir(self) -> Path:
-        """获取用户数据目录"""
+    @staticmethod
+    def get_user_data_dir() -> Path:
+        """获取用户数据目录（静态方法，不触发配置文件加载）"""
         if os.name == 'nt':  # Windows
             data_dir = Path.home() / "AppData" / "Local" / "AnkiCardAssistant" / "data"
         elif os.name == 'posix':  # macOS/Linux

@@ -6,36 +6,31 @@ aiohttp>=3.8.0
 # Anki相关
 genanki>=0.13.0
 
-# 数据处理
-pandas>=2.0.0
-numpy>=1.24.0
-
-# 文件处理
-pathlib2>=2.3.0
-python-magic>=0.4.27
-
-# 配置管理
-pyyaml>=6.0
-configparser>=5.3.0
-
-# 日志和调试
-colorlog>=6.7.0
-rich>=13.0.0
-
 # Web界面相关
 flask>=2.3.0
 flask-cors>=4.0.0
 flask-socketio>=5.3.0
 
-# 测试相关
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.1.0
+# 数据处理
+pandas>=2.0.0
+numpy>=1.24.0
+
+# 配置管理
+pyyaml>=6.0
+
+# 日志和调试
+colorlog>=6.7.0
+rich>=13.0.0
 
 # 开发工具
 black>=23.0.0
 flake8>=6.0.0
 mypy>=1.5.0
+
+# 测试相关
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
 
 # 文档生成
 sphinx>=7.0.0

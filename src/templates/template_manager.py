@@ -64,26 +64,10 @@ class TemplateManager:
             self.logger.warning(f"Quizify模板目录不存在: {quizify_dir}")
             return
         
-        # 读取CSS文件
-        css_file = quizify_dir / "quizify.css"
-        css_content = ""
-        if css_file.exists():
-            with open(css_file, 'r', encoding='utf-8') as f:
-                css_content = f.read()
-        
-        # 读取前端模板
-        front_file = quizify_dir / "front1.html"
-        front_content = ""
-        if front_file.exists():
-            with open(front_file, 'r', encoding='utf-8') as f:
-                front_content = f.read()
-        
-        # 读取后端模板
-        back_file = quizify_dir / "back1.html"
-        back_content = ""
-        if back_file.exists():
-            with open(back_file, 'r', encoding='utf-8') as f:
-                back_content = f.read()
+        # 读取模板文件
+        css_content = self._read_template_file(quizify_dir / "quizify.css")
+        front_content = self._read_template_file(quizify_dir / "front1.html")
+        back_content = self._read_template_file(quizify_dir / "back1.html")
         
         # 创建Quizify模板
         quizify_template = AnkiTemplate(
@@ -110,26 +94,10 @@ class TemplateManager:
             self.logger.warning(f"增强填空模板目录不存在: {cloze_dir}")
             return
         
-        # 读取CSS文件
-        css_file = cloze_dir / "quizify-with-enhanced-cloze.css"
-        css_content = ""
-        if css_file.exists():
-            with open(css_file, 'r', encoding='utf-8') as f:
-                css_content = f.read()
-        
-        # 读取前端模板
-        front_file = cloze_dir / "Front.html"
-        front_content = ""
-        if front_file.exists():
-            with open(front_file, 'r', encoding='utf-8') as f:
-                front_content = f.read()
-        
-        # 读取后端模板
-        back_file = cloze_dir / "Back.html"
-        back_content = ""
-        if back_file.exists():
-            with open(back_file, 'r', encoding='utf-8') as f:
-                back_content = f.read()
+        # 读取模板文件
+        css_content = self._read_template_file(cloze_dir / "quizify-with-enhanced-cloze.css")
+        front_content = self._read_template_file(cloze_dir / "Front.html")
+        back_content = self._read_template_file(cloze_dir / "Back.html")
         
         # 创建增强填空模板
         enhanced_cloze_template = AnkiTemplate(
@@ -268,8 +236,9 @@ class TemplateManager:
         
         for field in template.fields:
             value = sample_data.get(field.name, field.default_value)
-            front_preview = front_preview.replace(f"{{{{{field.name}}}}}", value)
-            back_preview = back_preview.replace(f"{{{{{field.name}}}}}", value)
+            field_placeholder = f"{{{{{field.name}}}}}"
+            front_preview = front_preview.replace(field_placeholder, value)
+            back_preview = back_preview.replace(field_placeholder, value)
         
         return {
             "front": front_preview,
@@ -299,3 +268,10 @@ class TemplateManager:
             return sorted(cloze_ids) == expected_ids
         
         return False
+    
+    def _read_template_file(self, file_path: Path) -> str:
+        """读取模板文件内容"""
+        if file_path.exists():
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        return ""

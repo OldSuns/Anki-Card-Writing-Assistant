@@ -19,7 +19,7 @@
     <link href="/static/css/style.css" rel="stylesheet">
     
     <!-- PWA支持 -->
-    <meta name="theme-color" content="#6366f1">
+    <meta name="theme-color" content="#4a90e2">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Anki写卡助手">
@@ -40,6 +40,11 @@
                         <i class="fas fa-circle text-warning me-2"></i>
                         <span>连接中...</span>
                     </div>
+                    
+                    <!-- 历史记录按钮 -->
+                    <button class="btn btn-outline-light btn-sm" id="history-btn" title="历史记录">
+                        <i class="fas fa-history"></i>
+                    </button>
                     
                     <!-- 设置按钮 -->
                     <button class="btn btn-outline-light btn-sm" id="settings-btn" title="设置">
@@ -75,6 +80,21 @@
                                 </div>
 
 
+
+                                <!-- 牌组名称设置 -->
+                                <div class="mb-3">
+                                    <label for="deck-name-input" class="form-label">
+                                        <i class="fas fa-folder me-2"></i>牌组名称
+                                    </label>
+                                    <input type="text" class="form-control" id="deck-name-input" 
+                                           placeholder="留空使用AI生成的牌组名称">
+                                    <div class="form-text">
+                                        <small class="text-muted">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            自定义牌组名称，优先级高于AI生成。留空时AI将根据内容自动生成合适的牌组名称
+                                        </small>
+                                    </div>
+                                </div>
 
                                 <!-- 高级设置区域 -->
                                 <div class="row">
@@ -126,19 +146,19 @@
                                     <div class="row">
                                         <div class="col-6">
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="json" id="export-json" checked>
+                                                <input class="form-check-input export-format-checkbox" type="checkbox" value="json" id="export-json">
                                                 <label class="form-check-label" for="export-json">
                                                     <i class="fas fa-code me-2"></i>JSON
                                                 </label>
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="html" id="export-html">
+                                                <input class="form-check-input export-format-checkbox" type="checkbox" value="html" id="export-html">
                                                 <label class="form-check-label" for="export-html">
                                                     <i class="fas fa-code me-2"></i>HTML
                                                 </label>
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="apkg" id="export-apkg" checked>
+                                                <input class="form-check-input export-format-checkbox" type="checkbox" value="apkg" id="export-apkg">
                                                 <label class="form-check-label" for="export-apkg">
                                                     <i class="fas fa-file-export me-2"></i>APKG
                                                 </label>
@@ -146,13 +166,13 @@
                                         </div>
                                         <div class="col-6">
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="csv" id="export-csv">
+                                                <input class="form-check-input export-format-checkbox" type="checkbox" value="csv" id="export-csv">
                                                 <label class="form-check-label" for="export-csv">
                                                     <i class="fas fa-table me-2"></i>CSV
                                                 </label>
                                             </div>
                                             <div class="form-check">
-                                                <input class="form-check-input" type="checkbox" value="txt" id="export-txt">
+                                                <input class="form-check-input export-format-checkbox" type="checkbox" value="txt" id="export-txt">
                                                 <label class="form-check-label" for="export-txt">
                                                     <i class="fas fa-file-alt me-2"></i>TXT
                                                 </label>
@@ -162,7 +182,7 @@
                                     <div class="form-text">
                                         <small class="text-muted">
                                             <i class="fas fa-info-circle me-1"></i>
-                                            APKG格式可直接导入Anki，JSON格式适合自定义导入，其他格式用于预览和编辑
+                                            修改导出格式将自动保存到配置文件
                                         </small>
                                     </div>
                                 </div>
@@ -230,32 +250,6 @@
                             <div class="alert alert-info d-none" id="prompt-info">
                                 <i class="fas fa-info-circle me-2"></i>
                                 <span id="prompt-info-text">提示词信息</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 欢迎消息 -->
-                    <div class="card mb-3" id="welcome-card">
-                        <div class="card-body text-center py-5">
-                            <i class="fas fa-magic fa-3x text-muted mb-3"></i>
-                            <h4 class="text-muted mb-3">欢迎使用 Anki 写卡助手</h4>
-                            <p class="text-muted mb-4">使用AI智能生成高质量的Anki记忆卡片，提升学习效率</p>
-                            <div class="row text-center">
-                                <div class="col-md-4">
-                                    <i class="fas fa-brain fa-2x text-primary mb-2"></i>
-                                    <h6>智能生成</h6>
-                                    <small class="text-muted">基于AI技术智能分析内容</small>
-                                </div>
-                                <div class="col-md-4">
-                                    <i class="fas fa-download fa-2x text-success mb-2"></i>
-                                    <h6>多格式导出</h6>
-                                    <small class="text-muted">支持JSON、CSV、HTML、TXT格式</small>
-                                </div>
-                                <div class="col-md-4">
-                                    <i class="fas fa-rocket fa-2x text-warning mb-2"></i>
-                                    <h6>快速高效</h6>
-                                    <small class="text-muted">秒级生成，即时可用</small>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -445,8 +439,13 @@
                                 <div class="row">
                                     <div class="col-md-6 mb-3">
                                         <label for="api-key" class="form-label">API密钥</label>
-                                        <input type="password" class="form-control" id="api-key" 
-                                               placeholder="输入您的API密钥">
+                                        <div class="input-group">
+                                            <input type="password" class="form-control" id="api-key" 
+                                                   placeholder="输入您的API密钥">
+                                            <button class="btn btn-outline-secondary" type="button" id="toggle-api-key">
+                                                <i class="fas fa-eye" id="toggle-api-key-icon"></i>
+                                            </button>
+                                        </div>
                                         <div class="form-text">您的API密钥将安全存储</div>
                                     </div>
                                     <div class="col-md-6 mb-3">
@@ -496,6 +495,131 @@
                     <button type="button" class="btn btn-primary" id="save-settings-btn">
                         <i class="fas fa-save me-2"></i>保存设置
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录模态框 -->
+    <div class="modal fade" id="history-modal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-history me-2"></i>历史生成记录</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 加载状态 -->
+                    <div id="history-loading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">正在加载历史记录...</p>
+                    </div>
+                    
+                    <!-- 历史记录列表 -->
+                    <div id="history-list" class="d-none">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">生成记录 (<span id="history-count">0</span>)</h6>
+                            <button class="btn btn-outline-primary btn-sm" id="refresh-history-btn">
+                                <i class="fas fa-sync-alt me-1"></i>刷新
+                            </button>
+                        </div>
+                        <div id="history-records" class="list-group">
+                            <!-- 历史记录项将在这里动态生成 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 空状态 -->
+                    <div id="history-empty" class="text-center py-4 d-none">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">暂无历史记录</h6>
+                        <p class="text-muted small">您还没有生成过任何卡片</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录详情模态框 -->
+    <div class="modal fade" id="history-detail-modal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-info-circle me-2"></i>记录详情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 加载状态 -->
+                    <div id="detail-loading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">正在加载详情...</p>
+                    </div>
+                    
+                    <!-- 详情内容 -->
+                    <div id="detail-content" class="d-none">
+                        <!-- 基本信息 -->
+                        <div class="card mb-3">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-info me-2"></i>基本信息</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <p><strong>生成时间：</strong><span id="detail-timestamp"></span></p>
+                                        <p><strong>牌组名称：</strong><span id="detail-deck-name"></span></p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <p><strong>卡片数量：</strong><span id="detail-card-count"></span></p>
+                                        <p><strong>原始内容：</strong><span id="detail-content-preview"></span></p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 卡片显示 -->
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="fas fa-list me-2"></i>卡片详情</h6>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span id="card-navigation-info" class="small text-muted">0 / 0</span>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-secondary" id="prev-card-btn" disabled>
+                                            <i class="fas fa-chevron-left"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary" id="next-card-btn" disabled>
+                                            <i class="fas fa-chevron-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="detail-cards-list">
+                                    <!-- 当前卡片将在这里显示 -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 文件下载 -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-download me-2"></i>文件下载</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="detail-files" class="row">
+                                    <!-- 文件下载按钮将在这里动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" id="delete-record-btn">
+                        <i class="fas fa-trash me-2"></i>删除记录
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
                 </div>
             </div>
         </div>
@@ -555,9 +679,17 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
     <script>
-        // 页面加载动画
+        // 页面加载动画和滚动位置管理
         document.addEventListener('DOMContentLoaded', function() {
+            // 添加loading类防止闪烁
+            document.body.classList.add('loading');
             document.body.classList.add('fade-in');
+            
+            // 页面完全加载后移除loading类
+            window.addEventListener('load', function() {
+                document.body.classList.remove('loading');
+                document.body.classList.add('loaded');
+            });
         });
         
         // 平滑滚动
@@ -583,7 +715,11 @@
         });
         
         document.getElementById('scroll-to-top').addEventListener('click', function() {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (window.app && typeof window.app.scrollToTop === 'function') {
+                window.app.scrollToTop();
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
         });
     </script>
     <script src="/static/js/app.js"></script>

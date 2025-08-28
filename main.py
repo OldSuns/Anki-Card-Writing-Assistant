@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
-"""
-Anki写卡助手主程序
-基于大语言模型的Anki记忆卡片生成工具
-"""
-
 import asyncio
 import argparse
 import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict
 
 # 添加src目录到Python路径
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -26,19 +21,10 @@ class AnkiCardAssistant:
     """Anki写卡助手主类"""
     
     def __init__(self, config_path: str = None):
-        # 不再依赖config目录，使用内存中的默认配置
-        self.config = self._get_default_config()
-        
-        # 如果提供了config_path，尝试加载配置（向后兼容）
-        if config_path:
-            try:
-                self.config_manager = ConfigManager(config_path)
-                loaded_config = self.config_manager.get_config()
-                # 合并配置
-                self._merge_config(loaded_config)
-            except Exception as e:
-                print(f"警告：无法加载配置文件 {config_path}: {e}")
-                print("使用默认配置")
+        # 使用ConfigManager加载配置
+        config_file_path = config_path or "config.json"
+        self.config_manager = ConfigManager(config_file_path)
+        self.config = self.config_manager.get_config()
         
         # 加载用户级设置（持久化）
         try:
@@ -55,153 +41,42 @@ class AnkiCardAssistant:
         self.template_manager = TemplateManager(self.config["templates"]["directory"])
         self.prompt_manager = BasePromptManager("src/prompts")
         self.card_generator = CardGenerator(
-            self.llm_manager, 
-            self.template_manager, 
+            self.llm_manager,
+            self.template_manager,
             self.prompt_manager
         )
         self.batch_generator = BatchCardGenerator(self.card_generator)
-        self.exporter = AnkiExporter(self.config["export"]["output_directory"])
+        self.exporter = AnkiExporter(self.config["export"]["output_directory"], self.template_manager)
         
         # 加载LLM客户端
         self._load_llm_clients()
         
         self.logger.info("Anki写卡助手初始化完成")
     
-    def _get_default_config(self):
-        """获取默认配置"""
-        return {
-            "app": {
-                "name": "Anki写卡助手",
-                "version": "1.0.0",
-                "description": "基于大语言模型的Anki记忆卡片生成工具",
-                "author": "Anki Card Writing Assistant Team"
-            },
-            "ui": {
-                "theme": "light",
-                "language": "zh-CN",
-                "window_size": {"width": 1200, "height": 800},
-                "show_preview": True
-            },
-            "llm": {
-                "api_key": "",
-                "base_url": "https://api.openai.com/v1",
-                "model": "gpt-3.5-turbo",
-                "temperature": 0.7,
-                "max_tokens": 2000,
-                "timeout": 30,
-                "retry_attempts": 3,
-                "retry_delay": 1
-            },
-            "generation": {
-                "default_template": "Quizify",
-                "default_prompt_type": "standard_qa",
-                "default_language": "zh-CN",
-                "default_difficulty": "medium",
-                "default_card_count": 1,
-                "batch_size": 10,
-                "max_content_length": 10000
-            },
-            "export": {
-                "default_formats": ["json", "csv", "html", "apkg"],
-                "output_directory": "output",
-                "filename_template": "anki_cards_{timestamp}",
-                "include_timestamp": True
-            },
-            "templates": {
-                "directory": "Card Template",
-                "auto_load": True,
-                "custom_templates_enabled": True
-            },
-            "prompts": {
-                "auto_load": True,
-                "custom_prompts_enabled": True,
-                "default_categories": ["standard", "cloze", "medical", "programming", "language"]
-            },
-            "logging": {
-                "level": "INFO",
-                "file_enabled": True,
-                "file_path": "logs/app.log",
-                "max_file_size": "10MB",
-                "backup_count": 5,
-                "console_enabled": True
-            },
-            "security": {
-                "api_key_encryption": True,
-                "config_file_permissions": "600",
-                "log_file_permissions": "644"
-            },
-            "performance": {
-                "max_concurrent_requests": 5,
-                "request_delay": 0.1,
-                "cache_enabled": True,
-                "cache_size": 100,
-                "cache_ttl": 3600
-            },
-            "features": {
-                "card_preview": True,
-                "batch_processing": True,
-                "template_editor": True,
-                "prompt_editor": True,
-                "export_preview": True,
-                "statistics": True
-            }
-        }
-    
-    def _merge_config(self, loaded_config):
-        """合并配置"""
-        def merge_dict(target, source):
-            for key, value in source.items():
-                if key in target and isinstance(target[key], dict) and isinstance(value, dict):
-                    merge_dict(target[key], value)
-                else:
-                    target[key] = value
-        
-        merge_dict(self.config, loaded_config)
     
     # ---------- 持久化用户设置 ----------
     def get_user_settings_path(self) -> Path:
         """获取用户设置文件路径"""
-        from src.utils.config_manager import ConfigManager as _CM
-        # 复用ConfigManager的用户目录逻辑
-        cm = _CM("dummy.json")
-        user_dir = cm.get_user_config_dir()
+        # 直接使用静态方法，避免实例化引发不存在文件的日志
+        user_dir = ConfigManager.get_user_config_dir()
         return user_dir / "settings.json"
 
     def load_user_settings(self):
         """加载用户设置并合并到内存配置"""
-        settings_path = self.get_user_settings_path()
-        if settings_path.exists():
-            with open(settings_path, 'r', encoding='utf-8') as f:
-                user_settings = json.load(f)
-            # 仅允许覆盖的键：llm
-            allowed = {
-                "llm": user_settings.get("llm", {})
-            }
-            self._merge_config(allowed)
+        # LLM配置现在直接存储在config.json中，无需额外加载
+        # 此方法保留以兼容性，但不再执行任何操作
+        pass
 
     def save_user_settings(self):
-        """将当前设置持久化到用户文件"""
-        settings_path = self.get_user_settings_path()
-        settings_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "llm": {
-                "api_key": self.config.get("llm", {}).get("api_key", ""),
-                "base_url": self.config.get("llm", {}).get("base_url", "https://api.openai.com/v1"),
-                "model": self.config.get("llm", {}).get("model", "gpt-3.5-turbo"),
-                "temperature": self.config.get("llm", {}).get("temperature", 0.7),
-                "max_tokens": self.config.get("llm", {}).get("max_tokens", 2000),
-                "timeout": self.config.get("llm", {}).get("timeout", 30)
-            }
-        }
-        with open(settings_path, 'w', encoding='utf-8') as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        """将当前设置持久化到配置文件"""
+        # LLM配置现在直接存储在config.json中
+        # 保存配置到文件
+        self.config_manager.save_config()
     
     def _setup_logging(self):
         """设置日志系统"""
-        log_config = self.config["logging"]
-        
         # 创建日志目录
-        log_path = Path(log_config["file_path"])
+        log_path = Path("logs/app.log")
         log_path.parent.mkdir(exist_ok=True)
         
         # 配置日志格式
@@ -209,27 +84,27 @@ class AnkiCardAssistant:
         
         # 配置根日志器
         logging.basicConfig(
-            level=getattr(logging, log_config["level"]),
+            level=logging.INFO,
             format=log_format,
             handlers=[]
         )
         
-        # 添加控制台处理器
-        if log_config["console_enabled"]:
-            console_handler = logging.StreamHandler()
-            console_handler.setFormatter(logging.Formatter(log_format))
-            logging.getLogger().addHandler(console_handler)
+        # 添加处理器
+        handlers = []
+        handlers.append(logging.StreamHandler())
         
-        # 添加文件处理器
-        if log_config["file_enabled"]:
-            from logging.handlers import RotatingFileHandler
-            file_handler = RotatingFileHandler(
-                log_path,
-                maxBytes=10*1024*1024,  # 10MB
-                backupCount=log_config["backup_count"]
-            )
-            file_handler.setFormatter(logging.Formatter(log_format))
-            logging.getLogger().addHandler(file_handler)
+        from logging.handlers import RotatingFileHandler
+        handlers.append(RotatingFileHandler(
+            log_path,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5
+        ))
+        
+        # 为所有处理器设置格式
+        formatter = logging.Formatter(log_format)
+        for handler in handlers:
+            handler.setFormatter(formatter)
+            logging.getLogger().addHandler(handler)
     
     def _load_llm_clients(self):
         """加载LLM客户端"""
@@ -242,11 +117,11 @@ class AnkiCardAssistant:
             if api_key and api_key.strip():
                 config = LLMConfig(
                     api_key=api_key,
-                    model=llm_config.get("model", "gpt-3.5-turbo"),
-                    base_url=llm_config.get("base_url", "https://api.openai.com/v1"),
-                    temperature=llm_config.get("temperature", 0.7),
-                    max_tokens=llm_config.get("max_tokens", 2000),
-                    timeout=llm_config.get("timeout", 30)
+                    model=llm_config.get("model"),
+                    base_url=llm_config.get("base_url"),
+                    temperature=llm_config.get("temperature"),
+                    max_tokens=llm_config.get("max_tokens"),
+                    timeout=llm_config.get("timeout")
                 )
                 self.llm_manager.set_client(config)
                 self.logger.info(f"已设置LLM客户端: {config.base_url} ({config.model})")
@@ -262,15 +137,22 @@ class AnkiCardAssistant:
             # 更新内存中的配置
             self.config.setdefault("llm", {}).update(llm_settings)
             
+            # 更新配置文件中的LLM设置
+            for key, value in llm_settings.items():
+                self.config_manager.set(f"llm.{key}", value)
+            
+            # 保存配置到config.json
+            self.config_manager.save_config()
+            
             # 如果提供了API密钥，重新设置LLM客户端
             if llm_settings.get("api_key"):
                 config = LLMConfig(
                     api_key=llm_settings["api_key"],
-                    model=llm_settings.get("model", "gpt-3.5-turbo"),
-                    base_url=llm_settings.get("base_url", "https://api.openai.com/v1"),
-                    temperature=llm_settings.get("temperature", 0.7),
-                    max_tokens=llm_settings.get("max_tokens", 2000),
-                    timeout=llm_settings.get("timeout", 30)
+                    model=llm_settings.get("model") or self.config["llm"]["model"],
+                    base_url=llm_settings.get("base_url") or self.config["llm"]["base_url"],
+                    temperature=llm_settings.get("temperature") or self.config["llm"]["temperature"],
+                    max_tokens=llm_settings.get("max_tokens") or self.config["llm"]["max_tokens"],
+                    timeout=llm_settings.get("timeout") or self.config["llm"]["timeout"]
                 )
                 self.llm_manager.set_client(config)
                 self.logger.info(f"已更新LLM客户端: {config.base_url} ({config.model})")
@@ -284,13 +166,10 @@ class AnkiCardAssistant:
         """生成卡片"""
         if config is None:
             config = GenerationConfig(
-                template_name=self.config["generation"]["default_template"],
-                prompt_type=self.config["generation"]["default_prompt_type"],
-                llm_client="default",  # 不再需要指定具体的LLM客户端
+                template_name="Quizify",  # 默认使用Quizify模板
+                prompt_type="cloze",      # 默认使用cloze提示词
                 temperature=self.config["llm"]["temperature"],
                 max_tokens=self.config["llm"]["max_tokens"],
-                language=self.config["generation"]["default_language"],
-                difficulty=self.config["generation"]["default_difficulty"],
                 card_count=self.config["generation"]["default_card_count"]
             )
         
@@ -312,13 +191,16 @@ class AnkiCardAssistant:
             self.logger.error(f"从文件生成卡片失败: {e}")
             raise
     
-    def export_cards(self, cards: list, formats: Optional[list] = None) -> dict:
+    def export_cards(self, cards: list, formats: Optional[list] = None, original_content: str = None, generation_config: Dict = None) -> dict:
         """导出卡片"""
         if formats is None:
             formats = self.config["export"]["default_formats"]
         
         try:
-            export_paths = self.exporter.export_multiple_formats(cards, formats)
+            export_paths = self.exporter.export_multiple_formats(
+                cards, formats, self.config["export"]["default_formats"], 
+                original_content=original_content, generation_config=generation_config
+            )
             self.logger.info(f"已导出卡片到: {export_paths}")
             return export_paths
         except Exception as e:
@@ -329,84 +211,70 @@ class AnkiCardAssistant:
         """列出可用模板"""
         return self.template_manager.list_templates()
     
-    def list_prompts(self, category: str = None) -> list:
-        """列出可用提示词"""
-        return self.prompt_manager.list_prompts(category=category)
+    def list_prompts(self, category: str = None, template_name: str = None) -> list:
+        """列出可用提示词（可按模板过滤）"""
+        return self.prompt_manager.list_prompts(category=category, template_name=template_name)
     
-    def list_prompt_names(self, category: str = None) -> list:
-        """列出可用提示词名称（用于显示）"""
-        return self.prompt_manager.list_prompt_names(category=category)
+    def list_prompt_names(self, category: str = None, template_name: str = None) -> list:
+        """列出可用提示词名称（用于显示，可按模板过滤）"""
+        return self.prompt_manager.list_prompt_names(category=category, template_name=template_name)
     
-    def get_prompt_content(self, prompt_type: str) -> str:
-        """获取提示词内容，优先读取用户文件"""
+    def get_prompt_content(self, prompt_type: str, template_name: str = None) -> str:
+        """获取提示词内容，优先读取用户文件，支持模板子目录优先级"""
         try:
-            # 首先尝试读取用户文件
-            user_prompt_file = Path("src/prompts") / f"{prompt_type}_user.md"
-            if user_prompt_file.exists():
-                with open(user_prompt_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                self.logger.info(f"从用户文件读取提示词: {prompt_type}_user.md")
-                return content
-            
-            # 如果用户文件不存在，读取原始文件
-            original_prompt_file = Path("src/prompts") / f"{prompt_type}.md"
-            if original_prompt_file.exists():
-                with open(original_prompt_file, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                self.logger.info(f"从原始文件读取提示词: {prompt_type}.md")
-                return content
-            
-            # 如果都不存在，从提示词管理器获取
-            prompt_content = self.prompt_manager.get_prompt(prompt_type)
+            # 委托给PromptManager，内部按模板子目录/全局顺序查找
+            prompt_content = self.prompt_manager.get_prompt(prompt_type, template_name)
             return prompt_content
-            
         except Exception as e:
             self.logger.error(f"获取提示词内容失败: {e}")
             raise
     
-    def save_prompt_content(self, prompt_type: str, content: str) -> None:
-        """保存提示词内容到用户文件"""
+    def _get_template_prompt_dir(self, template_name: str = None) -> Path:
+        """获取模板提示词目录"""
+        base_dir = Path("src/prompts")
+        if template_name:
+            folder = self.prompt_manager.template_dir_map.get(template_name)
+            if folder:
+                return base_dir / folder
+        return base_dir
+    
+    def _reload_prompt_manager(self):
+        """重新加载提示词管理器"""
+        self.prompt_manager = BasePromptManager("src/prompts")
+    
+    def save_prompt_content(self, prompt_type: str, content: str, template_name: str = None) -> None:
+        """保存提示词内容到用户文件；若提供模板名则保存到该模板子目录"""
         try:
-            # 保存到用户文件（添加_user后缀）
-            user_prompt_file = Path("src/prompts") / f"{prompt_type}_user.md"
-            
-            # 确保prompts目录存在
-            user_prompt_file.parent.mkdir(exist_ok=True)
-            
-            # 写入内容到用户文件
+            save_dir = self._get_template_prompt_dir(template_name)
+            save_dir.mkdir(parents=True, exist_ok=True)
+            user_prompt_file = save_dir / f"{prompt_type}_user.md"
             with open(user_prompt_file, 'w', encoding='utf-8') as f:
                 f.write(content)
-            
             # 重新加载提示词管理器
-            self.prompt_manager = BasePromptManager("src/prompts")
-            
-            self.logger.info(f"提示词内容已保存到用户文件: {prompt_type}_user.md")
+            self._reload_prompt_manager()
+            self.logger.info(f"提示词内容已保存: {user_prompt_file}")
         except Exception as e:
             self.logger.error(f"保存提示词内容失败: {e}")
             raise
     
-    def reset_prompt_content(self, prompt_type: str) -> str:
-        """重置提示词内容，从原始文件恢复"""
+    def reset_prompt_content(self, prompt_type: str, template_name: str = None) -> str:
+        """重置提示词内容，从原始文件恢复；优先模板目录"""
         try:
-            # 读取原始文件内容
-            original_prompt_file = Path("src/prompts") / f"{prompt_type}.md"
+            read_dir = self._get_template_prompt_dir(template_name)
+            # 读取原始文件
+            original_prompt_file = read_dir / f"{prompt_type}.md"
             if not original_prompt_file.exists():
-                raise FileNotFoundError(f"原始提示词文件不存在: {prompt_type}.md")
-            
+                raise FileNotFoundError(f"原始提示词文件不存在: {original_prompt_file}")
             with open(original_prompt_file, 'r', encoding='utf-8') as f:
                 original_content = f.read()
-            
-            # 将原始内容写入用户文件（覆盖用户修改）
-            user_prompt_file = Path("src/prompts") / f"{prompt_type}_user.md"
+            # 将原始内容写入目标用户文件
+            user_prompt_file = read_dir / f"{prompt_type}_user.md"
             with open(user_prompt_file, 'w', encoding='utf-8') as f:
                 f.write(original_content)
-            
             # 重新加载提示词管理器
-            self.prompt_manager = BasePromptManager("src/prompts")
-            
-            self.logger.info(f"提示词内容已重置为原始版本: {prompt_type}")
+            self._reload_prompt_manager()
+            self.logger.info(f"提示词内容已重置为原始版本: {user_prompt_file}")
             return original_content
-            
         except Exception as e:
             self.logger.error(f"重置提示词内容失败: {e}")
             raise
@@ -436,7 +304,6 @@ async def main():
     parser.add_argument("--file", "-f", help="包含内容的文件路径")
     parser.add_argument("--template", "-t", help="使用的模板名称")
     parser.add_argument("--prompt", "-p", help="使用的提示词类型")
-    parser.add_argument("--llm", "-l", help="LLM客户端（已弃用，统一使用配置的客户端）")
     parser.add_argument("--language", help="语言 (zh-CN)")
     parser.add_argument("--difficulty", help="难度 (easy, medium, hard)")
     parser.add_argument("--count", type=int, help="生成卡片数量")
@@ -504,11 +371,8 @@ async def main():
     
     # 构建生成配置
     config = GenerationConfig(
-        template_name=args.template or assistant.config["generation"]["default_template"],
-        prompt_type=args.prompt or assistant.config["generation"]["default_prompt_type"],
-        llm_client="default",  # 不再需要指定具体的LLM客户端
-        language=args.language or assistant.config["generation"]["default_language"],
-        difficulty=args.difficulty or assistant.config["generation"]["default_difficulty"],
+        template_name=args.template or "Quizify",  # 默认使用Quizify模板
+        prompt_type=args.prompt or "cloze",        # 默认使用cloze提示词
         card_count=args.count or assistant.config["generation"]["default_card_count"]
     )
     

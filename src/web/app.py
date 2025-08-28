@@ -1,8 +1,3 @@
-"""
-Anki写卡助手Web界面
-基于Flask的Web应用
-"""
-
 import asyncio
 import json
 import logging
@@ -36,6 +31,67 @@ class WebApp:
         self._register_routes()
         self._register_socket_events()
     
+    def _format_content_preview(self, content_preview):
+        """安全地格式化内容预览"""
+        if content_preview is None:
+            return ''
+        
+        content_str = str(content_preview)
+        if len(content_str) > 100:
+            return content_str[:100] + '...'
+        return content_str
+    
+    def _process_card_data(self, card, card_index):
+        """处理卡片数据，统一格式"""
+        if not isinstance(card, dict):
+            return {
+                'index': card_index,
+                'front': '无效卡片数据',
+                'back': '',
+                'deck': '',
+                'tags': [],
+                'fields': {},
+                'modelName': '',
+                'deckName': ''
+            }
+        
+        processed_card = {
+            'index': card_index,
+            'front': '',
+            'back': '',
+            'deck': '',
+            'tags': [],
+            'fields': card.get('fields', {}),
+            'modelName': card.get('modelName', ''),
+            'deckName': card.get('deckName', '')
+        }
+        
+        # 获取正面内容
+        if 'front' in card:
+            processed_card['front'] = card['front']
+        elif 'fields' in card and isinstance(card['fields'], dict):
+            processed_card['front'] = card['fields'].get('Front', '')
+        
+        # 获取背面内容
+        if 'back' in card:
+            processed_card['back'] = card['back']
+        elif 'fields' in card and isinstance(card['fields'], dict):
+            processed_card['back'] = card['fields'].get('Back', '')
+        
+        # 获取牌组名称
+        if 'deck' in card:
+            processed_card['deck'] = card['deck']
+        elif 'fields' in card and isinstance(card['fields'], dict):
+            processed_card['deck'] = card['fields'].get('Deck', '')
+        
+        # 获取标签
+        if 'tags' in card and isinstance(card['tags'], list):
+            processed_card['tags'] = card['tags']
+        elif 'fields' in card and isinstance(card['fields'], dict) and card['fields'].get('Tags'):
+            processed_card['tags'] = card['fields']['Tags'].split()
+        
+        return processed_card
+    
     def _register_routes(self):
         """注册路由"""
         
@@ -65,7 +121,8 @@ class WebApp:
             """获取可用提示词"""
             try:
                 category = request.args.get('category')
-                prompts = self.assistant.list_prompts(category=category)
+                template_name = request.args.get('template')
+                prompts = self.assistant.list_prompts(category=category, template_name=template_name)
                 return jsonify({
                     'success': True,
                     'data': prompts
@@ -82,7 +139,8 @@ class WebApp:
             """获取可用提示词名称（用于显示）"""
             try:
                 category = request.args.get('category')
-                prompt_names = self.assistant.list_prompt_names(category=category)
+                template_name = request.args.get('template')
+                prompt_names = self.assistant.list_prompt_names(category=category, template_name=template_name)
                 return jsonify({
                     'success': True,
                     'data': prompt_names
@@ -99,14 +157,15 @@ class WebApp:
             """获取提示词内容"""
             try:
                 prompt_type = request.args.get('prompt_type')
+                template_name = request.args.get('template')
                 if not prompt_type:
                     return jsonify({
                         'success': False,
                         'error': '请提供提示词类型'
                     }), 400
                 
-                # 获取提示词内容
-                prompt_content = self.assistant.get_prompt_content(prompt_type)
+                # 获取提示词内容（按模板优先）
+                prompt_content = self.assistant.get_prompt_content(prompt_type, template_name)
                 return jsonify({
                     'success': True,
                     'data': {
@@ -128,6 +187,7 @@ class WebApp:
                 data = request.get_json()
                 prompt_type = data.get('prompt_type')
                 content = data.get('content')
+                template_name = data.get('template')
                 
                 if not prompt_type or not content:
                     return jsonify({
@@ -135,8 +195,8 @@ class WebApp:
                         'error': '请提供提示词类型和内容'
                     }), 400
                 
-                # 保存提示词内容
-                self.assistant.save_prompt_content(prompt_type, content)
+                # 保存提示词内容（按模板优先）
+                self.assistant.save_prompt_content(prompt_type, content, template_name)
                 return jsonify({
                     'success': True,
                     'message': '提示词内容保存成功'
@@ -154,6 +214,7 @@ class WebApp:
             try:
                 data = request.get_json()
                 prompt_type = data.get('prompt_type')
+                template_name = data.get('template')
                 
                 if not prompt_type:
                     return jsonify({
@@ -161,8 +222,8 @@ class WebApp:
                         'error': '请提供提示词类型'
                     }), 400
                 
-                # 重置提示词内容
-                original_content = self.assistant.reset_prompt_content(prompt_type)
+                # 重置提示词内容（按模板优先）
+                original_content = self.assistant.reset_prompt_content(prompt_type, template_name)
                 return jsonify({
                     'success': True,
                     'message': '提示词内容已重置为原始版本',
@@ -209,37 +270,39 @@ class WebApp:
                 
                 # 构建生成配置
                 config = GenerationConfig(
-                    template_name=data.get('template', self.assistant.config["generation"]["default_template"]),
-                    prompt_type=data.get('prompt_type', self.assistant.config["generation"]["default_prompt_type"]),
-                    llm_client="default",
-                    language=data.get('language', self.assistant.config["generation"]["default_language"]),
-                    difficulty=data.get('difficulty', self.assistant.config["generation"]["default_difficulty"]),
-                    card_count=data.get('card_count', self.assistant.config["generation"]["default_card_count"])
+                    template_name=data.get('template', 'Quizify'),  # 默认使用Quizify模板
+                    prompt_type=data.get('prompt_type', 'cloze'),   # 默认使用cloze提示词
+                    card_count=data.get('card_count', self.assistant.config["generation"]["default_card_count"]),
+                    custom_deck_name=data.get('deck_name'),
+                    difficulty=data.get('difficulty', self.assistant.config["generation"]["default_difficulty"])
                 )
                 
                 # 异步生成卡片
-                async def generate():
-                    return await self.assistant.generate_cards(content, config)
-                
-                # 在新线程中运行异步任务
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    cards = loop.run_until_complete(generate())
-                finally:
-                    loop.close()
+                cards = self._run_async_task(self.assistant.generate_cards(content, config))
                 
                 # 导出卡片
-                export_formats = data.get('export_formats', ['json'])
-                export_paths = self.assistant.export_cards(cards, export_formats)
+                export_formats = data.get('export_formats', self.assistant.config["export"]["default_formats"])
+                export_paths = self.assistant.export_cards(
+                    cards, export_formats, 
+                    original_content=content,
+                    generation_config={
+                        'template_name': config.template_name,
+                        'prompt_type': config.prompt_type,
+                        'card_count': config.card_count,
+                        'custom_deck_name': config.custom_deck_name,
+                        'difficulty': config.difficulty
+                    }
+                )
                 
                 # 获取摘要
                 summary = self.assistant.get_export_summary(cards)
                 
+                # 将CardData对象转换为可JSON序列化
+                serializable_cards = [c.to_dict() if hasattr(c, 'to_dict') else c for c in cards]
                 return jsonify({
                     'success': True,
                     'data': {
-                        'cards': cards,
+                        'cards': serializable_cards,
                         'export_paths': export_paths,
                         'summary': summary
                     }
@@ -263,7 +326,7 @@ class WebApp:
                         'base_url': self.assistant.config.get('llm', {}).get('base_url', 'https://api.openai.com/v1'),
                         'model': self.assistant.config.get('llm', {}).get('model', 'gpt-3.5-turbo'),
                         'temperature': self.assistant.config.get('llm', {}).get('temperature', 0.7),
-                        'max_tokens': self.assistant.config.get('llm', {}).get('max_tokens', 2000),
+                        'max_tokens': self.assistant.config.get('llm', {}).get('max_tokens', 20000),
                         'timeout': self.assistant.config.get('llm', {}).get('timeout', 30)
                     }
                 }
@@ -288,26 +351,17 @@ class WebApp:
                 # 更新LLM设置
                 if 'llm' in data:
                     llm_settings = data['llm']
-                    if 'api_key' in llm_settings:
-                        self.assistant.config.setdefault('llm', {})['api_key'] = llm_settings['api_key']
-                    if 'base_url' in llm_settings:
-                        self.assistant.config.setdefault('llm', {})['base_url'] = llm_settings['base_url']
-                    if 'model' in llm_settings:
-                        self.assistant.config.setdefault('llm', {})['model'] = llm_settings['model']
-                    if 'temperature' in llm_settings:
-                        self.assistant.config.setdefault('llm', {})['temperature'] = float(llm_settings['temperature'])
-                    if 'max_tokens' in llm_settings:
-                        self.assistant.config.setdefault('llm', {})['max_tokens'] = int(llm_settings['max_tokens'])
-                    if 'timeout' in llm_settings:
-                        self.assistant.config.setdefault('llm', {})['timeout'] = int(llm_settings['timeout'])
+                    llm_config = self.assistant.config.setdefault('llm', {})
+                    
+                    # 更新各项设置
+                    for key, value in llm_settings.items():
+                        if key in ['temperature', 'max_tokens', 'timeout']:
+                            llm_config[key] = type(value)(value) if value else value
+                        else:
+                            llm_config[key] = value
                     
                     # 更新LLM客户端
                     self.assistant.update_llm_config(llm_settings)
-                
-                # 不再处理自动保存等界面设置
-                
-                # 保存到内存中的配置
-                # 注意：这里不再保存到文件，因为我们要废除config目录
                 
                 # 持久化到用户设置
                 try:
@@ -400,6 +454,394 @@ class WebApp:
                     'error': str(e)
                 }), 500
 
+        @self.app.route('/api/update-export-formats', methods=['POST'])
+        def update_export_formats():
+            """更新配置文件中的导出格式"""
+            try:
+                data = request.get_json()
+                export_formats = data.get('export_formats', [])
+                
+                # 更新配置文件中的导出格式
+                self.assistant.config_manager.set('export.default_formats', export_formats)
+                self.assistant.config_manager.save_config()
+                
+                return jsonify({
+                    'success': True,
+                    'message': '导出格式已更新'
+                })
+                
+            except Exception as e:
+                self.logger.error(f"更新导出格式失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/api/history')
+        def get_history():
+            """获取历史生成记录"""
+            try:
+                import os
+                from datetime import datetime
+                
+                output_dir = Path(self.assistant.config["export"]["output_directory"])
+                history_records = []
+                
+                if output_dir.exists():
+                    # 获取所有生成的文件
+                    for file_path in output_dir.glob("anki_cards_*.json"):
+                        try:
+                            # 从文件名解析时间戳
+                            filename = file_path.stem
+                            if "_" in filename:
+                                # 文件名格式: anki_cards_20250828_231020
+                                # 需要解析: 20250828_231020
+                                parts = filename.split("_")
+                                if len(parts) >= 3:
+                                    date_str = parts[-2]  # 20250828
+                                    time_str = parts[-1]  # 231020
+                                    
+                                    # 解析日期和时间
+                                    if len(date_str) == 8 and len(time_str) == 6:
+                                        year = int(date_str[:4])
+                                        month = int(date_str[4:6])
+                                        day = int(date_str[6:8])
+                                        hour = int(time_str[:2])
+                                        minute = int(time_str[2:4])
+                                        second = int(time_str[4:6])
+                                        
+                                        timestamp = datetime(year, month, day, hour, minute, second)
+                                    else:
+                                        # 回退到原始解析方式
+                                        timestamp_str = f"{date_str}_{time_str}"
+                                        timestamp = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                                else:
+                                    # 如果格式不匹配，跳过此文件
+                                    continue
+                                
+                                # 读取JSON文件获取详细信息
+                                with open(file_path, 'r', encoding='utf-8') as f:
+                                    card_data = json.load(f)
+                                
+                                # 构建历史记录
+                                # 支持新的JSON格式（包含metadata）和旧格式
+                                if isinstance(card_data, dict) and 'metadata' in card_data:
+                                    # 新格式：包含metadata
+                                    metadata = card_data.get('metadata', {})
+                                    cards_list = card_data.get('cards', [])
+                                    
+                                    record = {
+                                        'id': filename,
+                                        'timestamp': metadata.get('timestamp', timestamp.isoformat()),
+                                        'timestamp_display': timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                                        'card_count': metadata.get('card_count', len(cards_list)),
+                                        'deck_name': metadata.get('deck_name', '未知牌组'),
+                                        'content_preview': self._format_content_preview(metadata.get('content_preview', '')),
+                                        'files': {}
+                                    }
+                                elif isinstance(card_data, list):
+                                    # 旧格式：直接是卡片列表
+                                    cards_list = card_data
+                                    
+                                    # 尝试从第一个卡片中获取牌组信息
+                                    deck_name = '未知牌组'
+                                    content_preview = '从卡片数据生成'
+                                    
+                                    if cards_list and isinstance(cards_list[0], dict):
+                                        first_card = cards_list[0]
+                                        # 尝试从不同字段获取牌组名称
+                                        deck_name = (
+                                            first_card.get('deckName') or 
+                                            first_card.get('deck') or 
+                                            first_card.get('fields', {}).get('Deck') or 
+                                            '未知牌组'
+                                        )
+                                        
+                                        # 尝试从卡片内容生成预览
+                                        front_content = ''
+                                        if 'fields' in first_card and isinstance(first_card['fields'], dict):
+                                            front_content = first_card['fields'].get('Front', '')
+                                        elif 'front' in first_card:
+                                            front_content = first_card['front']
+                                        
+                                        if front_content:
+                                            # 清理HTML标签和特殊字符
+                                            import re
+                                            clean_content = re.sub(r'<[^>]+>', '', front_content)
+                                            clean_content = re.sub(r'\{\{[^}]+\}\}', '', clean_content)
+                                            content_preview = clean_content[:100] + '...' if len(clean_content) > 100 else clean_content
+                                    
+                                    record = {
+                                        'id': filename,
+                                        'timestamp': timestamp.isoformat(),
+                                        'timestamp_display': timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                                        'card_count': len(cards_list),
+                                        'deck_name': deck_name,
+                                        'content_preview': content_preview,
+                                        'files': {}
+                                    }
+                                else:
+                                    # 未知格式，跳过
+                                    continue
+                                
+                                # 检查相关文件是否存在
+                                base_name = file_path.stem
+                                for ext in ['json', 'csv', 'html', 'txt', 'apkg']:
+                                    ext_file = output_dir / f"{base_name}.{ext}"
+                                    if ext_file.exists():
+                                        record['files'][ext] = {
+                                            'exists': True,
+                                            'size': ext_file.stat().st_size,
+                                            'filename': ext_file.name
+                                        }
+                                    else:
+                                        record['files'][ext] = {'exists': False}
+                                
+                                history_records.append(record)
+                                
+                        except Exception as e:
+                            self.logger.warning(f"解析历史记录文件失败 {file_path}: {e}")
+                            continue
+                
+                # 按时间倒序排列
+                history_records.sort(key=lambda x: x['timestamp'], reverse=True)
+                
+                return jsonify({
+                    'success': True,
+                    'data': history_records
+                })
+                
+            except Exception as e:
+                self.logger.error(f"获取历史记录失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/api/history/<record_id>/detail')
+        def get_history_detail(record_id):
+            """获取历史记录详情"""
+            try:
+                output_dir = Path(self.assistant.config["export"]["output_directory"])
+                json_file = output_dir / f"{record_id}.json"
+                
+                if not json_file.exists():
+                    return jsonify({
+                        'success': False,
+                        'error': '记录不存在'
+                    }), 404
+                
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    card_data = json.load(f)
+                
+                # 处理新的JSON格式（包含metadata）和旧格式
+                if isinstance(card_data, dict) and 'metadata' in card_data:
+                    # 新格式：包含metadata
+                    cards_list = card_data.get('cards', [])
+                    
+                    # 处理卡片数据，确保格式统一
+                    processed_cards = []
+                    for i, card in enumerate(cards_list):
+                        processed_card = self._process_card_data(card, i + 1)
+                        processed_cards.append(processed_card)
+                    
+                    response_data = {
+                        'timestamp': card_data['metadata'].get('timestamp'),
+                        'deck_name': card_data['metadata'].get('deck_name', '未知牌组'),
+                        'card_count': card_data['metadata'].get('card_count', len(processed_cards)),
+                        'content_preview': self._format_content_preview(card_data['metadata'].get('content_preview', '')),
+                        'generation_config': card_data['metadata'].get('generation_config', {}),
+                        'cards': processed_cards,
+                        'current_card_index': 0,  # 当前显示的卡片索引
+                        'total_cards': len(processed_cards)
+                    }
+                elif isinstance(card_data, list):
+                    # 旧格式：直接是卡片列表
+                    deck_name = '未知牌组'
+                    content_preview = '从卡片数据生成'
+                    
+                    # 处理卡片数据，确保格式统一
+                    processed_cards = []
+                    for i, card in enumerate(card_data):
+                        processed_card = self._process_card_data(card, i + 1)
+                        processed_cards.append(processed_card)
+                    
+                    if processed_cards:
+                        first_card = processed_cards[0]
+                        # 尝试从不同字段获取牌组名称
+                        deck_name = (
+                            first_card.get('deckName') or 
+                            first_card.get('deck') or 
+                            first_card.get('fields', {}).get('Deck') or 
+                            '未知牌组'
+                        )
+                        
+                        # 尝试从卡片内容生成预览
+                        front_content = first_card.get('front', '')
+                        
+                        if front_content:
+                            # 清理HTML标签和特殊字符
+                            import re
+                            clean_content = re.sub(r'<[^>]+>', '', front_content)
+                            clean_content = re.sub(r'\{\{[^}]+\}\}', '', clean_content)
+                            content_preview = clean_content[:200] + '...' if len(clean_content) > 200 else clean_content
+                    
+                    response_data = {
+                        'timestamp': None,
+                        'deck_name': deck_name,
+                        'card_count': len(processed_cards),
+                        'content_preview': content_preview,
+                        'generation_config': {},
+                        'cards': processed_cards,
+                        'current_card_index': 0,  # 当前显示的卡片索引
+                        'total_cards': len(processed_cards)
+                    }
+                else:
+                    # 未知格式
+                    response_data = {
+                        'timestamp': None,
+                        'deck_name': '未知牌组',
+                        'card_count': 0,
+                        'content_preview': '',
+                        'generation_config': {},
+                        'cards': []
+                    }
+                
+                return jsonify({
+                    'success': True,
+                    'data': response_data
+                })
+                
+            except Exception as e:
+                self.logger.error(f"获取历史记录详情失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/api/history/<record_id>/download/<file_type>')
+        def download_history_file(record_id, file_type):
+            """下载历史记录文件"""
+            try:
+                # 获取绝对路径
+                output_dir = Path(self.assistant.config["export"]["output_directory"]).resolve()
+                file_path = output_dir / f"{record_id}.{file_type}"
+                
+                self.logger.info(f"下载请求: record_id={record_id}, file_type={file_type}")
+                self.logger.info(f"输出目录: {output_dir}")
+                self.logger.info(f"文件路径: {file_path}")
+                self.logger.info(f"文件是否存在: {file_path.exists()}")
+                
+                if not file_path.exists():
+                    self.logger.warning(f"文件不存在: {file_path}")
+                    return jsonify({
+                        'success': False,
+                        'error': '文件不存在'
+                    }), 404
+                
+                # 使用绝对路径发送文件，确保Windows兼容
+                self.logger.info(f"发送文件: {str(output_dir)}/{file_path.name}")
+                
+                # 尝试使用send_file而不是send_from_directory
+                from flask import send_file
+                return send_file(
+                    file_path,
+                    as_attachment=True,
+                    download_name=file_path.name
+                )
+                
+            except Exception as e:
+                self.logger.error(f"下载历史记录文件失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/api/history/<record_id>/card/<int:card_index>')
+        def get_history_card(record_id, card_index):
+            """获取历史记录中的特定卡片"""
+            try:
+                output_dir = Path(self.assistant.config["export"]["output_directory"])
+                json_file = output_dir / f"{record_id}.json"
+                
+                if not json_file.exists():
+                    return jsonify({
+                        'success': False,
+                        'error': '记录不存在'
+                    }), 404
+                
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    card_data = json.load(f)
+                
+                # 处理卡片数据
+                cards_list = []
+                if isinstance(card_data, dict) and 'metadata' in card_data:
+                    cards_list = card_data.get('cards', [])
+                elif isinstance(card_data, list):
+                    cards_list = card_data
+                
+                if not cards_list:
+                    return jsonify({
+                        'success': False,
+                        'error': '没有卡片数据'
+                    }), 404
+                
+                # 检查卡片索引是否有效
+                if card_index < 1 or card_index > len(cards_list):
+                    return jsonify({
+                        'success': False,
+                        'error': f'卡片索引无效，有效范围：1-{len(cards_list)}'
+                    }), 400
+                
+                # 处理指定卡片
+                card = cards_list[card_index - 1]  # 转换为0基索引
+                processed_card = self._process_card_data(card, card_index)
+                
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'card': processed_card,
+                        'current_index': card_index,
+                        'total_cards': len(cards_list),
+                        'has_previous': card_index > 1,
+                        'has_next': card_index < len(cards_list)
+                    }
+                })
+                
+            except Exception as e:
+                self.logger.error(f"获取历史记录卡片失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+
+        @self.app.route('/api/history/<record_id>', methods=['DELETE'])
+        def delete_history_record(record_id):
+            """删除历史记录"""
+            try:
+                output_dir = Path(self.assistant.config["export"]["output_directory"])
+                
+                # 删除所有相关文件
+                deleted_files = []
+                for ext in ['json', 'csv', 'html', 'txt', 'apkg']:
+                    file_path = output_dir / f"{record_id}.{ext}"
+                    if file_path.exists():
+                        file_path.unlink()
+                        deleted_files.append(file_path.name)
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'已删除 {len(deleted_files)} 个文件',
+                    'data': {'deleted_files': deleted_files}
+                })
+                
+            except Exception as e:
+                self.logger.error(f"删除历史记录失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+
         @self.app.route('/api/test-llm', methods=['POST'])
         def test_llm():
             """测试LLM连接，输入固定或来自请求体"""
@@ -408,17 +850,9 @@ class WebApp:
                 prompt = data.get('prompt') or 'Hi,Who are you?'
 
                 # 使用当前已配置的LLM客户端进行一次简单调用
-                async def run_test():
-                    client = self.assistant.llm_manager
-                    reply = await client.generate_text(prompt)
-                    return reply
-
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    reply = loop.run_until_complete(run_test())
-                finally:
-                    loop.close()
+                reply = self._run_async_task(
+                    self.assistant.llm_manager.generate_text(prompt)
+                )
 
                 return jsonify({
                     'success': True,
@@ -427,20 +861,19 @@ class WebApp:
             except Exception as e:
                 err_text = str(e)
                 base_url = self.assistant.config.get('llm', {}).get('base_url', '')
-                # 更严格的Cloudflare判断：仅在出现典型CF标记时提示
-                cf_markers = ['cf-error-details', 'Cloudflare Ray ID', '/cdn-cgi/', 'Attention Required! | Cloudflare']
-                is_cf = any(m in err_text for m in cf_markers)
-                if is_cf:
+                
+                # 处理特定错误情况
+                if self._is_cloudflare_error(err_text):
                     err_text = (
-                        f'请求可能被Cloudflare防护拦截（{base_url}）。请在“AI设置”中将 API 基础URL(base_url) 换为可直连、无浏览器质询的后端域名，'
+                        f'请求可能被Cloudflare防护拦截（{base_url}）。请在"AI设置"中将 API 基础URL(base_url) 换为可直连、无浏览器质询的后端域名，'
                         '例如官方 OpenAI: https://api.openai.com/v1，或你的服务商提供的后端专用域名/加速地址。'
                     )
-                # 非CF但返回整页HTML时，给出通用指引
-                elif ('<!DOCTYPE html>' in err_text) or ('<html' in err_text.lower()):
+                elif self._is_html_response(err_text):
                     err_text = (
                         f'目标返回HTML页面（{base_url}）。可能是网关/反向代理错误或需要浏览器验证。'
                         '请检查 base_url 是否正确指向后端API地址，并确认网络可直连；如使用第三方服务商，请使用其后端API域名。'
                     )
+                
                 self.logger.error(f"API测试失败: {err_text}")
                 return jsonify({
                     'success': False,
@@ -456,21 +889,59 @@ class WebApp:
         def download_file(filename):
             """文件下载服务"""
             try:
-                # 从output目录下载文件
-                output_dir = Path(self.assistant.config["export"]["output_directory"])
+                import os
+                
+                # 获取Flask应用的根目录（项目根目录）
+                app_root = Path(self.app.root_path).parent.parent
+                output_dir = app_root / "output"
+                
+                # Windows路径适配：统一转换为正斜杠
+                filename = filename.replace('\\', '/')
+                
+                # 移除可能的路径前缀
+                if filename.startswith('output/'):
+                    filename = filename[7:]
+                elif filename.startswith('output\\'):
+                    filename = filename[8:]
+                
+                # 确保文件名安全，防止路径遍历攻击
+                filename = filename.strip('/')
+                if '..' in filename or filename.startswith('/'):
+                    return jsonify({
+                        'success': False,
+                        'error': '无效的文件名'
+                    }), 400
+                
+                # 构建完整文件路径
                 file_path = output_dir / filename
                 
+                self.logger.info(f"下载请求: {filename}")
+                self.logger.info(f"应用根目录: {app_root}")
+                self.logger.info(f"输出目录: {output_dir}")
+                self.logger.info(f"文件完整路径: {file_path}")
+                
+                # 检查文件是否存在
                 if not file_path.exists():
+                    self.logger.error(f"文件不存在: {file_path}")
+                    
+                    # 列出output目录中的所有文件用于调试
+                    if output_dir.exists():
+                        files = list(output_dir.glob('*'))
+                        self.logger.info(f"Output目录中的文件: {[f.name for f in files]}")
+                    else:
+                        self.logger.error(f"Output目录不存在: {output_dir}")
+                    
                     return jsonify({
                         'success': False,
                         'error': '文件不存在'
                     }), 404
                 
+                # 使用绝对路径发送文件，确保Windows兼容
                 return send_from_directory(
-                    output_dir, 
-                    filename, 
+                    str(output_dir),
+                    filename,
                     as_attachment=True,
-                    download_name=filename
+                    download_name=os.path.basename(filename)
                 )
                 
             except Exception as e:
@@ -508,37 +979,28 @@ class WebApp:
                 
                 # 构建生成配置
                 config = GenerationConfig(
-                    template_name=data.get('template', self.assistant.config["generation"]["default_template"]),
-                    prompt_type=data.get('prompt_type', self.assistant.config["generation"]["default_prompt_type"]),
-                    llm_client="default",
-                    language=data.get('language', self.assistant.config["generation"]["default_language"]),
-                    difficulty=data.get('difficulty', self.assistant.config["generation"]["default_difficulty"]),
-                    card_count=data.get('card_count', self.assistant.config["generation"]["default_card_count"])
+                    template_name=data.get('template', 'Quizify'),  # 默认使用Quizify模板
+                    prompt_type=data.get('prompt_type', 'cloze'),   # 默认使用cloze提示词
+                    card_count=data.get('card_count', self.assistant.config["generation"]["default_card_count"]),
+                    custom_deck_name=data.get('deck_name'),
+                    difficulty=data.get('difficulty', self.assistant.config["generation"]["default_difficulty"])
                 )
                 
                 # 异步生成卡片
-                async def generate():
-                    return await self.assistant.generate_cards(content, config)
-                
-                # 在新线程中运行异步任务
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    cards = loop.run_until_complete(generate())
-                finally:
-                    loop.close()
+                cards = self._run_async_task(self.assistant.generate_cards(content, config))
                 
                 emit('generation_progress', {'message': f'已生成 {len(cards)} 张卡片'})
                 
                 # 导出卡片
-                export_formats = data.get('export_formats', ['json'])
+                export_formats = data.get('export_formats', self.assistant.config["export"]["default_formats"])
                 export_paths = self.assistant.export_cards(cards, export_formats)
                 
                 # 获取摘要
                 summary = self.assistant.get_export_summary(cards)
                 
+                serializable_cards = [c.to_dict() if hasattr(c, 'to_dict') else c for c in cards]
                 emit('generation_complete', {
-                    'cards': cards,
+                    'cards': serializable_cards,
                     'export_paths': export_paths,
                     'summary': summary
                 })
@@ -552,6 +1014,24 @@ class WebApp:
         self.logger.info(f"启动Web服务器: http://{host}:{port}")
         # 在调试模式下启用自动重载
         self.socketio.run(self.app, host=host, port=port, debug=debug, use_reloader=debug)
+    
+    def _run_async_task(self, coro):
+        """运行异步任务的辅助方法"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+    
+    def _is_cloudflare_error(self, error_text: str) -> bool:
+        """检查是否为Cloudflare错误"""
+        cf_markers = ['cf-error-details', 'Cloudflare Ray ID', '/cdn-cgi/', 'Attention Required! | Cloudflare']
+        return any(marker in error_text for marker in cf_markers)
+    
+    def _is_html_response(self, error_text: str) -> bool:
+        """检查是否为HTML响应"""
+        return ('<!DOCTYPE html>' in error_text) or ('<html' in error_text.lower())
 
 def create_app(assistant=None):
     """创建Flask应用实例"""

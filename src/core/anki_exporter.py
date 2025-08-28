@@ -15,17 +15,18 @@ import shutil
 
 from .card_generator import CardData
 from .genanki_exporter import GenAnkiExporter
+from ..templates.template_manager import TemplateManager
 
 class AnkiExporter:
     """Anki导出器"""
     
-    def __init__(self, output_dir: str = "output"):
+    def __init__(self, output_dir: str = "output", template_manager: TemplateManager = None):
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(exist_ok=True)
         self.logger = logging.getLogger(__name__)
-        self.genanki_exporter = GenAnkiExporter(output_dir)
+        self.genanki_exporter = GenAnkiExporter(output_dir, template_manager)
     
-    def export_to_json(self, cards: List[CardData], filename: str = None) -> str:
+    def export_to_json(self, cards: List[CardData], filename: str = None, original_content: str = None, generation_config: Dict = None) -> str:
         """导出为JSON格式"""
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -33,8 +34,19 @@ class AnkiExporter:
         
         output_path = self.output_dir / filename
         
+        # 构建完整的导出数据，包含元数据
+        export_data = {
+            "metadata": {
+                "timestamp": datetime.now().isoformat(),
+                "card_count": len(cards),
+                "deck_name": cards[0].deck if cards else "默认牌组",
+                "content_preview": original_content[:200] + "..." if original_content and len(original_content) > 200 else original_content,
+                "generation_config": generation_config or {}
+            },
+            "cards": []
+        }
+        
         # 转换为Anki导入格式
-        anki_data = []
         for card in cards:
             anki_card = {
                 "modelName": card.model,
@@ -46,11 +58,11 @@ class AnkiExporter:
                     "closeAfterAddingNote": True
                 }
             }
-            anki_data.append(anki_card)
+            export_data["cards"].append(anki_card)
         
         # 写入JSON文件
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(anki_data, f, ensure_ascii=False, indent=2)
+            json.dump(export_data, f, ensure_ascii=False, indent=2)
         
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
         return str(output_path)
@@ -75,18 +87,14 @@ class AnkiExporter:
             writer = csv.writer(f)
             
             # 写入表头
-            header = ['#separator:tab', '#html:true', '#tags column:4']
-            writer.writerow(header)
+            writer.writerow(['#separator:tab', '#html:true', '#tags column:4'])
             
             # 写入字段名
             writer.writerow(field_names)
             
             # 写入卡片数据
             for card in cards:
-                row = []
-                for field in field_names:
-                    value = card.fields.get(field, '')
-                    row.append(value)
+                row = [card.fields.get(field, '') for field in field_names]
                 writer.writerow(row)
         
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
@@ -95,68 +103,6 @@ class AnkiExporter:
     def export_to_apkg(self, cards: List[CardData], filename: str = None) -> str:
         """导出为.apkg格式（Anki包）"""
         return self.genanki_exporter.export_to_apkg(cards, filename)
-    
-    def _create_anki_package_structure(self, temp_path: Path, cards: List[CardData]):
-        """创建Anki包结构"""
-        # 创建collection.anki2数据库文件（简化版本）
-        collection_data = self._create_collection_data(cards)
-        
-        # 写入collection.anki2
-        collection_path = temp_path / "collection.anki2"
-        with open(collection_path, 'w', encoding='utf-8') as f:
-            json.dump(collection_data, f, ensure_ascii=False, indent=2)
-        
-        # 创建media目录
-        media_dir = temp_path / "media"
-        media_dir.mkdir(exist_ok=True)
-        
-        # 创建media索引文件
-        media_index = {}
-        media_index_path = media_dir / "media.json"
-        with open(media_index_path, 'w', encoding='utf-8') as f:
-            json.dump(media_index, f, ensure_ascii=False, indent=2)
-    
-    def _create_collection_data(self, cards: List[CardData]) -> Dict[str, Any]:
-        """创建集合数据"""
-        # 按模型分组卡片
-        models = {}
-        decks = {}
-        
-        for card in cards:
-            # 创建模型
-            if card.model not in models:
-                models[card.model] = {
-                    "name": card.model,
-                    "type": 0,  # 0 = 标准模型
-                    "flds": [{"name": field, "ord": i} for i, field in enumerate(card.fields.keys())],
-                    "tmpls": [{
-                        "name": "卡片 1",
-                        "qfmt": "{{Front}}",
-                        "afmt": "{{FrontSide}}\n\n<hr id=answer>\n\n{{Back}}"
-                    }]
-                }
-            
-            # 创建牌组
-            if card.deck not in decks:
-                decks[card.deck] = {
-                    "name": card.deck,
-                    "desc": f"由Anki写卡助手生成的牌组 - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                    "cards": []
-                }
-            
-            # 添加卡片到牌组
-            decks[card.deck]["cards"].append({
-                "model": card.model,
-                "fields": card.fields,
-                "tags": card.tags
-            })
-        
-        return {
-            "models": models,
-            "decks": decks,
-            "created": datetime.now().isoformat(),
-            "modified": datetime.now().isoformat()
-        }
     
     def export_to_text(self, cards: List[CardData], filename: str = None) -> str:
         """导出为纯文本格式"""
@@ -302,25 +248,24 @@ class AnkiExporter:
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
         return str(output_path)
     
-    def export_multiple_formats(self, cards: List[CardData], formats: List[str] = None) -> Dict[str, str]:
+    def export_multiple_formats(self, cards: List[CardData], formats: List[str] = None, default_formats: List[str] = None, original_content: str = None, generation_config: Dict = None) -> Dict[str, str]:
         """导出多种格式"""
         if formats is None:
-            formats = ['json', 'csv', 'apkg', 'html']
+            formats = default_formats or ['json', 'apkg']
         
         export_paths = {}
+        export_methods = {
+            'json': lambda c: self.export_to_json(c, original_content=original_content, generation_config=generation_config),
+            'csv': self.export_to_csv,
+            'apkg': self.export_to_apkg,
+            'txt': self.export_to_text,
+            'html': self.export_to_html
+        }
         
         for format_type in formats:
             try:
-                if format_type == 'json':
-                    export_paths['json'] = self.export_to_json(cards)
-                elif format_type == 'csv':
-                    export_paths['csv'] = self.export_to_csv(cards)
-                elif format_type == 'apkg':
-                    export_paths['apkg'] = self.export_to_apkg(cards)
-                elif format_type == 'txt':
-                    export_paths['txt'] = self.export_to_text(cards)
-                elif format_type == 'html':
-                    export_paths['html'] = self.export_to_html(cards)
+                if format_type in export_methods:
+                    export_paths[format_type] = export_methods[format_type](cards)
                 else:
                     self.logger.warning(f"不支持的导出格式: {format_type}")
             except Exception as e:
@@ -332,21 +277,17 @@ class AnkiExporter:
         """获取导出摘要"""
         # 按牌组统计
         deck_stats = {}
-        for card in cards:
-            if card.deck not in deck_stats:
-                deck_stats[card.deck] = 0
-            deck_stats[card.deck] += 1
-        
         # 按模型统计
         model_stats = {}
-        for card in cards:
-            if card.model not in model_stats:
-                model_stats[card.model] = 0
-            model_stats[card.model] += 1
-        
         # 收集所有标签
         all_tags = set()
+        
         for card in cards:
+            # 统计牌组
+            deck_stats[card.deck] = deck_stats.get(card.deck, 0) + 1
+            # 统计模型
+            model_stats[card.model] = model_stats.get(card.model, 0) + 1
+            # 收集标签
             all_tags.update(card.tags)
         
         return {
