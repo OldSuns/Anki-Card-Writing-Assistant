@@ -59,7 +59,7 @@ class TemplateManager:
     
     def _load_quizify_templates(self):
         """加载Quizify模板"""
-        quizify_dir = self.template_dir / "Card Template"
+        quizify_dir = self.template_dir / "Quizify"
         if not quizify_dir.exists():
             self.logger.warning(f"Quizify模板目录不存在: {quizify_dir}")
             return
@@ -89,7 +89,7 @@ class TemplateManager:
     
     def _load_enhanced_cloze_templates(self):
         """加载增强填空模板"""
-        cloze_dir = self.template_dir / "Card Template Enhanced Cloze"
+        cloze_dir = self.template_dir / "Enhanced Cloze"
         if not cloze_dir.exists():
             self.logger.warning(f"增强填空模板目录不存在: {cloze_dir}")
             return
@@ -105,8 +105,10 @@ class TemplateManager:
             description="增强填空模板，支持提示、动画等高级功能",
             fields=[
                 TemplateField("Content", True, "", "包含填空的内容"),
+                TemplateField("Back Extra", False, "", "背面额外内容"),
                 TemplateField("Deck", True, "", "牌组名称"),
-                TemplateField("Tags", False, "", "标签")
+                TemplateField("Tags", False, "", "标签"),
+                TemplateField("Cloze99", False, "", "AnkiDroid兼容字段")
             ],
             front_template=front_content,
             back_template=back_content,

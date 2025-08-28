@@ -211,11 +211,22 @@ class CardGenerator:
             is_cloze = getattr(template, 'is_cloze', False)
             
             if is_cloze:
-                fields = {
-                    "Content": cloze_content,
-                    "Deck": deck_name,
-                    "Tags": " ".join(card_data["tags"])
-                }
+                # 根据模板名称决定使用哪个字段
+                if template.name == "Enhanced Cloze":
+                    fields = {
+                        "Content": cloze_content,
+                        "Back Extra": card_data.get("back", ""),
+                        "Deck": deck_name,
+                        "Tags": " ".join(card_data["tags"]),
+                        "Cloze99": ""  # AnkiDroid兼容字段
+                    }
+                else:
+                    fields = {
+                        "Text": cloze_content,
+                        "Back Extra": card_data.get("back", ""),
+                        "Deck": deck_name,
+                        "Tags": " ".join(card_data["tags"])
+                    }
             elif is_quizify:
                 # Quizify 模板：选择题需要背面解析，填空卡片背面为空
                 fields = {

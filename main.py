@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.core.llm_client import LLMManager, LLMConfig
 from src.core.card_generator import CardGenerator, BatchCardGenerator, GenerationConfig, CardData
-from src.core.anki_exporter import AnkiExporter
+from src.core.unified_exporter import UnifiedExporter
 from src.templates.template_manager import TemplateManager
 from src.prompts.base_prompts import BasePromptManager
 from src.utils.config_manager import ConfigManager
@@ -48,7 +48,7 @@ class AnkiCardAssistant:
             self.prompt_manager
         )
         self.batch_generator = BatchCardGenerator(self.card_generator)
-        self.exporter = AnkiExporter(self.config["export"]["output_directory"], self.template_manager)
+        self.exporter = UnifiedExporter(self.config["export"]["output_directory"], self.template_manager)
         
         # 加载LLM客户端
         self._load_llm_clients()
@@ -303,13 +303,13 @@ class AnkiCardAssistant:
         """获取导出摘要"""
         return self.exporter.get_export_summary(cards)
     
-    def export_apkg(self, cards: list, filename: str = None) -> str:
+    def export_apkg(self, cards: list, filename: str = None, template_name: str = None) -> str:
         """导出为apkg格式"""
-        return self.exporter.export_to_apkg(cards, filename)
+        return self.exporter.export_to_apkg(cards, filename, template_name)
     
-    def export_apkg_with_custom_template(self, cards: list, template_path: str, filename: str = None) -> str:
+    def export_apkg_with_custom_template(self, cards: list, template_name: str, filename: str = None) -> str:
         """使用自定义模板导出为apkg格式"""
-        return self.exporter.export_to_apkg_with_custom_template(cards, template_path, filename)
+        return self.exporter.export_to_apkg_with_custom_template(cards, template_name, filename)
 
 async def main():
     """主函数"""

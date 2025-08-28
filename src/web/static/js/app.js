@@ -285,11 +285,11 @@ class AnkiCardAssistant {
 
         // 历史记录详情卡片导航
         this.elements.prevCardBtn?.addEventListener('click', () => {
-            this.showPreviousCard();
+            this.showHistoryPreviousCard();
         });
 
         this.elements.nextCardBtn?.addEventListener('click', () => {
-            this.showNextCard();
+            this.showHistoryNextCard();
         });
 
         // 监听导出格式复选框变化
@@ -1698,15 +1698,15 @@ class AnkiCardAssistant {
         }
     }
     
-    // 显示上一张卡片
-    showPreviousCard() {
+    // 显示上一张卡片（历史记录详情）
+    showHistoryPreviousCard() {
         if (this.currentCardIndex > 0) {
             this.showCard(this.currentCardIndex - 1);
         }
     }
     
-    // 显示下一张卡片
-    showNextCard() {
+    // 显示下一张卡片（历史记录详情）
+    showHistoryNextCard() {
         if (this.currentCards && this.currentCardIndex < this.currentCards.length - 1) {
             this.showCard(this.currentCardIndex + 1);
         }

@@ -582,7 +582,7 @@ class WebApp:
             try:
                 data = request.get_json()
                 cards_data = data.get('cards', [])
-                template_path = data.get('template_path', None)
+                template_name = data.get('template_name', None)  # 改为template_name
                 filename = data.get('filename', None)
                 
                 if not cards_data:
@@ -606,10 +606,10 @@ class WebApp:
                     cards.append(card)
                 
                 # 导出apkg文件
-                if template_path:
+                if template_name:
                     # 使用自定义模板
                     export_path = self.assistant.export_apkg_with_custom_template(
-                        cards, template_path, filename
+                        cards, template_name, filename
                     )
                 else:
                     # 使用标准模板
