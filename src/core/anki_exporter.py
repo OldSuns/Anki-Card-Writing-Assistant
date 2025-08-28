@@ -248,10 +248,38 @@ class AnkiExporter:
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
         return str(output_path)
     
-    def export_multiple_formats(self, cards: List[CardData], formats: List[str] = None, default_formats: List[str] = None, original_content: str = None, generation_config: Dict = None) -> Dict[str, str]:
+    def export_multiple_formats(self, cards: List[CardData], formats: List[str] = None, original_content: str = None, generation_config: Dict = None) -> Dict[str, str]:
         """导出多种格式"""
+        self.logger.debug(f"export_multiple_formats 被调用，formats参数: {formats} (类型: {type(formats)})")
+        
         if formats is None:
-            formats = default_formats or ['json', 'apkg']
+            formats = ['json', 'apkg']
+        
+        # 确保formats是字符串列表
+        if not isinstance(formats, list):
+            self.logger.warning(f"导出格式参数类型错误，使用默认格式: {type(formats)}")
+            formats = ['json', 'apkg']
+        
+        # 过滤有效格式
+        supported_formats = {'json', 'csv', 'apkg', 'txt', 'html'}
+        valid_formats = []
+        for fmt in formats:
+            if isinstance(fmt, str):
+                # 检查是否是数字字符串（这是bug的症状）
+                if fmt.isdigit():
+                    self.logger.debug(f"跳过数字格式: {fmt}")
+                    continue
+                # 检查是否是支持的格式
+                if fmt in supported_formats:
+                    valid_formats.append(fmt)
+                else:
+                    self.logger.warning(f"不支持的导出格式: {fmt}")
+            else:
+                self.logger.warning(f"跳过非字符串格式: {fmt} (类型: {type(fmt)})")
+        
+        if not valid_formats:
+            self.logger.warning("没有有效的导出格式，使用默认格式")
+            valid_formats = ['json', 'apkg']
         
         export_paths = {}
         export_methods = {
@@ -262,12 +290,12 @@ class AnkiExporter:
             'html': self.export_to_html
         }
         
-        for format_type in formats:
+        for format_type in valid_formats:
             try:
                 if format_type in export_methods:
                     export_paths[format_type] = export_methods[format_type](cards)
                 else:
-                    self.logger.warning(f"不支持的导出格式: {format_type}")
+                    self.logger.warning(f"不支持的导出格式: {format_type} (类型: {type(format_type)})")
             except Exception as e:
                 self.logger.error(f"导出 {format_type} 格式失败: {e}")
         

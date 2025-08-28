@@ -11,7 +11,7 @@ from typing import Optional, Dict
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.core.llm_client import LLMManager, LLMConfig
-from src.core.card_generator import CardGenerator, BatchCardGenerator, GenerationConfig
+from src.core.card_generator import CardGenerator, BatchCardGenerator, GenerationConfig, CardData
 from src.core.anki_exporter import AnkiExporter
 from src.templates.template_manager import TemplateManager
 from src.prompts.base_prompts import BasePromptManager
@@ -195,12 +195,24 @@ class AnkiCardAssistant:
     
     def export_cards(self, cards: list, formats: Optional[list] = None, original_content: str = None, generation_config: Dict = None) -> dict:
         """导出卡片"""
+        # 确保 formats 是有效的格式列表
         if formats is None:
-            formats = self.config["export"]["default_formats"]
+            formats = self.config["export"]["default_formats"].copy()  # 使用副本避免修改原始配置
+        else:
+            # 验证传入的格式参数
+            if not isinstance(formats, list):
+                formats = self.config["export"]["default_formats"].copy()
+            else:
+                # 过滤掉无效的格式
+                valid_formats = []
+                for fmt in formats:
+                    if isinstance(fmt, str) and fmt in ['json', 'csv', 'apkg', 'txt', 'html']:
+                        valid_formats.append(fmt)
+                formats = valid_formats if valid_formats else self.config["export"]["default_formats"].copy()
         
         try:
             export_paths = self.exporter.export_multiple_formats(
-                cards, formats, self.config["export"]["default_formats"], 
+                cards, formats, 
                 original_content=original_content, generation_config=generation_config
             )
             self.logger.info(f"已导出卡片到: {export_paths}")
@@ -386,11 +398,10 @@ async def main():
             cards = await assistant.generate_cards(args.content, config)
         
         # 导出卡片
-        if args.export:
-            export_paths = assistant.export_cards(cards, args.export)
-            print(f"卡片已导出到:")
-            for format_type, path in export_paths.items():
-                print(f"  {format_type}: {path}")
+        export_paths = assistant.export_cards(cards, args.export)
+        print(f"卡片已导出到:")
+        for format_type, path in export_paths.items():
+            print(f"  {format_type}: {path}")
         
         # 显示摘要
         summary = assistant.get_export_summary(cards)

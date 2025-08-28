@@ -345,6 +345,12 @@ class BatchCardGenerator:
             try:
                 self.logger.info(f"处理第 {i+1}/{len(contents)} 个内容")
                 cards = await self.card_generator.generate_cards(content, config)
+                
+                # 验证返回的是卡片对象列表
+                if cards and not isinstance(cards[0], CardData):
+                    self.logger.error(f"card_generator.generate_cards 返回的不是卡片对象列表，而是: {type(cards[0])}")
+                    continue
+                
                 all_cards.extend(cards)
             except Exception as e:
                 self.logger.error(f"处理第 {i+1} 个内容失败: {e}")
@@ -367,7 +373,15 @@ class BatchCardGenerator:
             else:
                 contents = [content]
             
-            return await self.generate_batch(contents, config)
+            # 确保返回的是卡片列表，而不是内容列表
+            cards = await self.generate_batch(contents, config)
+            
+            # 验证返回的是卡片对象列表
+            if cards and not isinstance(cards[0], CardData):
+                self.logger.error(f"generate_batch 返回的不是卡片对象列表，而是: {type(cards[0])}")
+                raise ValueError(f"generate_batch 返回了错误的数据类型: {type(cards[0])}")
+            
+            return cards
             
         except Exception as e:
             self.logger.error(f"从文件生成卡片失败: {e}")
@@ -377,10 +391,22 @@ class BatchCardGenerator:
         """分割文本内容"""
         # 按段落分割
         paragraphs = content.split('\n\n')
-        return [p.strip() for p in paragraphs if p.strip()]
+        # 过滤掉空字符串并去除首尾空白
+        valid_paragraphs = []
+        for paragraph in paragraphs:
+            stripped = paragraph.strip()
+            if stripped:  # 只保留非空内容
+                valid_paragraphs.append(stripped)
+        return valid_paragraphs
     
     def _split_markdown_content(self, content: str) -> List[str]:
         """分割Markdown内容"""
         # 按标题分割
         sections = re.split(r'^#{1,6}\s+', content, flags=re.MULTILINE)
-        return [s.strip() for s in sections if s.strip()]
+        # 过滤掉空字符串并去除首尾空白
+        valid_sections = []
+        for section in sections:
+            stripped = section.strip()
+            if stripped:  # 只保留非空内容
+                valid_sections.append(stripped)
+        return valid_sections

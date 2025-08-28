@@ -125,23 +125,7 @@
                                                     </button>
                                                 </div>
                                                 
-                                                <!-- 文件内容预览 -->
-                                                <div class="mt-3">
-                                                    <h6>内容预览</h6>
-                                                    <div class="content-preview" id="content-preview"></div>
-                                                </div>
-                                                
-                                                <!-- 章节选择 -->
-                                                <div class="mt-3" id="sections-selection" style="display: none;">
-                                                    <h6>选择要处理的章节</h6>
-                                                    <div class="form-check">
-                                                        <input class="form-check-input" type="checkbox" id="select-all-sections">
-                                                        <label class="form-check-label" for="select-all-sections">
-                                                            全选所有章节
-                                                        </label>
-                                                    </div>
-                                                    <div id="sections-list" class="mt-2"></div>
-                                                </div>
+
                                             </div>
                                         </div>
                                     </div>
@@ -286,6 +270,36 @@
 
                 <!-- 右侧结果区域 -->
                 <div class="col-lg-8">
+                    <!-- 文件内容预览 -->
+                    <div class="card mb-3 d-none" id="file-preview-card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-eye me-2"></i>文件内容预览
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="content-preview" id="content-preview"></div>
+                        </div>
+                    </div>
+
+                    <!-- 章节选择 -->
+                    <div class="card mb-3 d-none" id="sections-selection-card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-list me-2"></i>选择要处理的章节
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="select-all-sections">
+                                <label class="form-check-label" for="select-all-sections">
+                                    全选所有章节
+                                </label>
+                            </div>
+                            <div id="sections-list" class="sections-list"></div>
+                        </div>
+                    </div>
+
                     <!-- 提示词编辑器 -->
                     <div class="card mb-3 d-none" id="prompt-editor-card">
                         <div class="card-header d-flex justify-content-between align-items-center">

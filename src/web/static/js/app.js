@@ -507,7 +507,8 @@ class AnkiCardAssistant {
 
     getSelectedExportFormats() {
         const formats = [];
-        const checkboxes = document.querySelectorAll('input[type="checkbox"]:checked');
+        // 只选择导出格式的复选框，避免选择其他复选框（如章节选择）
+        const checkboxes = document.querySelectorAll('.export-format-checkbox:checked');
         checkboxes.forEach(checkbox => {
             formats.push(checkbox.value);
         });
@@ -1959,6 +1960,15 @@ class AnkiCardAssistant {
         // 输入方式切换
         this.elements.textInputRadio?.addEventListener('change', () => {
             this.switchToTextInput();
+            // 隐藏右侧的文件预览和章节选择卡片
+            const filePreviewCard = document.getElementById('file-preview-card');
+            const sectionsSelectionCard = document.getElementById('sections-selection-card');
+            if (filePreviewCard) {
+                filePreviewCard.classList.add('d-none');
+            }
+            if (sectionsSelectionCard) {
+                sectionsSelectionCard.classList.add('d-none');
+            }
         });
 
         this.elements.fileInputRadio?.addEventListener('change', () => {
@@ -2082,13 +2092,25 @@ class AnkiCardAssistant {
 
         // 显示内容预览
         this.elements.contentPreview.textContent = file_info.content_preview;
+        
+        // 显示右侧的文件预览卡片
+        const filePreviewCard = document.getElementById('file-preview-card');
+        if (filePreviewCard) {
+            filePreviewCard.classList.remove('d-none');
+        }
 
         // 显示章节选择（如果有多个章节）
         if (sections.length > 1) {
             this.displaySectionsList(sections);
-            this.elements.sectionsSelection.style.display = 'block';
+            const sectionsSelectionCard = document.getElementById('sections-selection-card');
+            if (sectionsSelectionCard) {
+                sectionsSelectionCard.classList.remove('d-none');
+            }
         } else {
-            this.elements.sectionsSelection.style.display = 'none';
+            const sectionsSelectionCard = document.getElementById('sections-selection-card');
+            if (sectionsSelectionCard) {
+                sectionsSelectionCard.classList.add('d-none');
+            }
         }
 
         // 显示文件信息区域
@@ -2138,10 +2160,19 @@ class AnkiCardAssistant {
     // 清除上传的文件
     clearUploadedFile() {
         this.elements.fileInfo.style.display = 'none';
-        this.elements.sectionsSelection.style.display = 'none';
         this.elements.contentPreview.textContent = '';
         this.elements.fileWarnings.innerHTML = '';
         this.currentFileData = null;
+        
+        // 隐藏右侧的文件预览和章节选择卡片
+        const filePreviewCard = document.getElementById('file-preview-card');
+        const sectionsSelectionCard = document.getElementById('sections-selection-card');
+        if (filePreviewCard) {
+            filePreviewCard.classList.add('d-none');
+        }
+        if (sectionsSelectionCard) {
+            sectionsSelectionCard.classList.add('d-none');
+        }
     }
 
     // 显示文件上传状态
@@ -2188,7 +2219,7 @@ class AnkiCardAssistant {
         await this.performCardGeneration({
             content: content,
             template: this.elements.templateSelect.value,
-            prompt_type: this.elements.promptSelect.value,
+            prompt_type: this.promptNameToKey[this.elements.promptSelect.value] || this.elements.promptSelect.value,
             card_count: parseInt(this.elements.cardCount.value),
             deck_name: this.elements.deckNameInput.value,
             difficulty: this.elements.difficultySelect.value,
@@ -2219,7 +2250,7 @@ class AnkiCardAssistant {
             temp_file_path: this.currentFileData.temp_file_path,
             selected_sections: selectedSections,
             template: this.elements.templateSelect.value,
-            prompt_type: this.elements.promptSelect.value,
+            prompt_type: this.promptNameToKey[this.elements.promptSelect.value] || this.elements.promptSelect.value,
             card_count: parseInt(this.elements.cardCount.value),
             deck_name: this.elements.deckNameInput.value,
             difficulty: this.elements.difficultySelect.value,
@@ -2266,7 +2297,7 @@ class AnkiCardAssistant {
                 const formData = {
                     content: data.content,
                     template: data.template,
-                    prompt_type: this.promptNameToKey[data.prompt_type] || data.prompt_type,
+                    prompt_type: data.prompt_type, // 已经在调用时进行了映射
                     language: 'zh-CN',
                     difficulty: data.difficulty,
                     card_count: data.card_count,
