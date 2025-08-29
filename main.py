@@ -3,6 +3,7 @@ import asyncio
 import argparse
 import logging
 import sys
+import re
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -75,16 +76,46 @@ class AnkiCardAssistant:
             handlers=[]
         )
         
+        # 定义日志内容清洗（去除ANSI、替换不可显示字符）
+        ansi_pattern = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+
+        def _sanitize_log_text(text):
+            if not isinstance(text, str):
+                try:
+                    text = str(text)
+                except Exception:
+                    return "?"
+            # 去除 ANSI 转义序列
+            text = ansi_pattern.sub('', text)
+            # 替换不可显示字符为 '?'
+            return ''.join(ch if ch.isprintable() or ch in '\t\r\n' else '?' for ch in text)
+
+        class SafeTextFilter(logging.Filter):
+            def filter(self, record):
+                try:
+                    # 先用 getMessage() 格式化，再覆盖 msg 并清空 args，避免重复格式化
+                    sanitized = _sanitize_log_text(record.getMessage())
+                    record.msg = sanitized
+                    record.args = ()
+                except Exception:
+                    pass
+                return True
+
         # 添加处理器
         from logging.handlers import RotatingFileHandler
-        handlers = [
-            logging.StreamHandler(),
-            RotatingFileHandler(log_path, maxBytes=MAX_LOG_SIZE, backupCount=5)
-        ]
+        stream_handler = logging.StreamHandler()
+        file_handler = RotatingFileHandler(
+            log_path,
+            maxBytes=MAX_LOG_SIZE,
+            backupCount=5,
+            encoding='utf-8'
+        )
+        # 仅对文件日志添加清洗过滤器，避免控制台日志被修改
+        file_handler.addFilter(SafeTextFilter())
         
         # 为所有处理器设置格式
         formatter = logging.Formatter(LOG_FORMAT)
-        for handler in handlers:
+        for handler in (stream_handler, file_handler):
             handler.setFormatter(formatter)
             logging.getLogger().addHandler(handler)
     
