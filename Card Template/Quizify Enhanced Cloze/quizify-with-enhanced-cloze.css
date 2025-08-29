@@ -19,6 +19,7 @@ Contact Details:
     --img-width: 50%;
     --img-brightness: 1;
     --img-filter: none;
+    --cloze-min-width: 3em; /* 默认最小宽度 */
 }
 
 html {
@@ -169,11 +170,22 @@ html:not(.mobile) .card {
     color: var(--blank-fg);
     padding: 0 0.4em 0.06em;
     margin: 0 0.2em;
-	  border-bottom:2px solid;
+    border-bottom: 2px solid;
     font-family: var(--font-blank);
     text-align: center;
     font-weight: bold;
     letter-spacing: 0.06em;
+    min-width: var(--cloze-min-width, 3em); /* 使用动态计算的宽度 */
+    width: auto; /* 让宽度自适应内容 */
+    display: inline-block; /* 确保min-width生效 */
+    box-sizing: border-box; /* 确保padding和border包含在宽度计算中 */
+    white-space: nowrap; /* 防止文字换行，确保精确宽度 */
+    overflow: hidden; /* 防止内容溢出 */
+    text-overflow: ellipsis; /* 超出时显示省略号 */
+    vertical-align: text-bottom; /* 与文本底部对齐 */
+    line-height: 1.2; /* 设置合适的行高 */
+    /* 调试模式：显示宽度信息（可选） */
+    /* border: 1px solid red; */
 }
 
 /* Genuine cloze (当前卡片需要回答的cloze) */
@@ -188,7 +200,18 @@ html:not(.mobile) .card {
     border-bottom: 2px solid #c86d92;
     font-weight: bold;
     text-decoration: none;
+    /* 确保hint状态下有足够的点击区域和视觉反馈 */
+    position: relative;
+    background-color: transparent;
+}
 
+/* 为hint状态的genuine-cloze添加虚拟内容，确保有足够的点击区域 */
+.genuine-cloze[show-state="hint"]::after {
+    content: "\00A0"; /* 不可见的空格字符 */
+    display: inline-block;
+    min-height: 1.2em; /* 确保有足够的高度 */
+    vertical-align: text-bottom; /* 与文本底部对齐 */
+    box-sizing: border-box; /* 确保盒模型一致 */
 }
 
 
@@ -198,8 +221,19 @@ html:not(.mobile) .card {
     border-bottom: 2px solid;
     font-weight: bold;
     text-decoration: none;
-    min-width: 3em;
+    min-width: var(--cloze-min-width, 3em); /* 使用动态计算的宽度 */
+    /* 确保hint状态下有足够的点击区域和视觉反馈 */
+    position: relative;
+    background-color: transparent;
+}
 
+/* 为hint状态的pseudo-cloze添加虚拟内容，确保有足够的点击区域 */
+.pseudo-cloze[show-state="hint"]::after {
+    content: "\00A0"; /* 不可见的空格字符 */
+    display: inline-block;
+    min-height: 1.2em; /* 确保有足够的高度 */
+    vertical-align: text-bottom; /* 与文本底部对齐 */
+    box-sizing: border-box; /* 确保盒模型一致 */
 }
 
 
@@ -207,6 +241,77 @@ html:not(.mobile) .card {
 .key {
     opacity: 0;
     transition: all 0.3s ease-in-out;
+    display: inline;
+}
+
+/* 当显示答案时，key元素应该可见 */
+.genuine-cloze[show-state="answer"] .key,
+.pseudo-cloze[show-state="answer"] .key {
+    opacity: 1 !important;
+}
+
+/* 当显示提示时，key元素应该隐藏，让Anki处理下划线 */
+.genuine-cloze[show-state="hint"] .key,
+.pseudo-cloze[show-state="hint"] .key {
+    opacity: 0 !important;
+}
+
+/* 单击显示内容的动画效果 */
+.cloze-revealed {
+    animation: revealAnimation 0.3s ease-in-out;
+}
+
+@keyframes revealAnimation {
+    0% {
+        transform: scale(1);
+        background-color: transparent;
+    }
+    50% {
+        transform: scale(1.05);
+        background-color: rgba(200, 109, 146, 0.1);
+    }
+    100% {
+        transform: scale(1);
+        background-color: transparent;
+    }
+}
+
+/* 优化单击交互的视觉反馈 */
+.genuine-cloze:hover,
+.pseudo-cloze:hover {
+    background-color: rgba(200, 109, 146, 0.05);
+    border-radius: 3px;
+    transition: background-color 0.2s ease-in-out;
+}
+
+/* 特别确保hint状态下的悬浮效果 */
+.genuine-cloze[show-state="hint"]:hover,
+.pseudo-cloze[show-state="hint"]:hover {
+    background-color: rgba(200, 109, 146, 0.05);
+    border-radius: 3px;
+    transition: background-color 0.2s ease-in-out;
+}
+
+/* 已显示答案的cloze样式 */
+.genuine-cloze[show-state="answer"],
+.pseudo-cloze[show-state="answer"] {
+    background-color: rgba(200, 109, 146, 0.08);
+    border-radius: 3px;
+    transition: background-color 0.3s ease-in-out;
+    min-width: var(--cloze-min-width, 3em); /* 保持与hint状态相同的宽度 */
+    width: auto; /* 确保宽度能够自适应内容 */
+    white-space: nowrap; /* 防止文字换行，确保精确宽度 */
+    overflow: hidden; /* 防止内容溢出 */
+    text-overflow: ellipsis; /* 超出时显示省略号 */
+    vertical-align: text-bottom; /* 与文本底部对齐 */
+    line-height: 1.2; /* 设置合适的行高 */
+}
+
+/* 显示答案时移除伪元素 */
+.genuine-cloze[show-state="answer"]::after,
+.pseudo-cloze[show-state="answer"]::after {
+    content: none;
+    display: none; /* 确保伪元素完全隐藏 */
 }
 
 /* Cloze entry (输入框) */
@@ -314,6 +419,7 @@ html:not(.mobile) .card {
     font-size: 64%;
     user-select: none;
     vertical-align: middle;
+    position: relative;
 }
 
 .comment {
@@ -326,25 +432,88 @@ html:not(.mobile) .card {
     text-align: justify;
     border-radius: 0.5em;
     padding: 0.5em;
-    position: fixed;
-    z-index: 1;
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1000;
     transition: all 0.3s ease-in-out;
-    max-width: 75%;
-    white-space: nowrap;
+    max-width: 300px;
+    min-width: 200px;
+    white-space: normal;
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+    margin-bottom: 8px;
 }
 
 .comment::after {
     content: "";
     position: absolute;
-    top: var(--comment-after-top, auto);
-    bottom: var(--comment-after-bottom, -8px);
+    top: 100%;
     left: 50%;
     transform: translateX(-50%);
-    margin-left: var(--comment-after-left, 0px);
     border: 8px solid transparent;
-    border-top: var(--comment-after-border-top, 8px solid var(--comment-bg));
-    border-bottom: var(--comment-after-border-bottom, none);
+    border-top: 8px solid var(--comment-bg);
+    border-bottom: none;
+}
+
+/* 移动端适配 */
+.mobile .comment {
+    max-width: 250px;
+    min-width: 150px;
+    font-size: 0.9em;
+}
+
+/* 确保注释在屏幕边缘时不会超出边界 */
+.comment {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    /* 防止注释超出屏幕边界 */
+    max-width: calc(100vw - 40px);
+}
+
+/* 当注释可能超出左边界时 */
+.comment[style*="left: 0"] {
+    left: 0;
+    transform: none;
+}
+
+/* 当注释可能超出右边界时 */
+.comment[style*="right: 0"] {
+    left: auto;
+    right: 0;
+    transform: none;
+}
+
+/* 注释显示动画 */
+.comment {
+    animation: commentFadeIn 0.3s ease-in-out;
+}
+
+@keyframes commentFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* 注释隐藏动画 */
+.comment[style*="visibility: hidden"] {
+    animation: commentFadeOut 0.2s ease-in-out;
+}
+
+@keyframes commentFadeOut {
+    from {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(-50%) translateY(10px);
+    }
 }
 
 /* -------------------------------------------------- 隐藏 */

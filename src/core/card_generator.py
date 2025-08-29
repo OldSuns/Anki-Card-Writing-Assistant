@@ -68,9 +68,14 @@ class CardGenerator:
             if not template:
                 raise ValueError(f"未找到模板: {config.template_name}")
             
+            # 根据模板名称确定提示词类型
+            effective_prompt_type = config.prompt_type
+            if config.template_name == "Quizify Enhanced Cloze" and config.prompt_type == "cloze":
+                effective_prompt_type = "enhanced_cloze"
+            
             # 获取提示词
             prompt = self.prompt_manager.get_prompt(
-                config.prompt_type,
+                effective_prompt_type,
                 template_name=template.name
             )
             
@@ -78,7 +83,7 @@ class CardGenerator:
             full_prompt = self._build_prompt(prompt, content, config)
             
             # 根据提示词类型选择生成方法
-            if config.prompt_type == 'cloze':
+            if effective_prompt_type in ['cloze', 'enhanced_cloze']:
                 cards = await self._generate_cloze_cards(
                     self.llm_manager, full_prompt, template, config
                 )
@@ -212,7 +217,7 @@ class CardGenerator:
             
             if is_cloze:
                 # 根据模板名称决定使用哪个字段
-                if template.name == "Enhanced Cloze":
+                if template.name == "Quizify Enhanced Cloze":
                     fields = {
                         "Content": cloze_content,
                         "Back Extra": card_data.get("back", ""),

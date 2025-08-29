@@ -34,7 +34,7 @@ class UnifiedExporter:
             "basic": 1607392319,
             "basic_reversed": 1607392320,
             "cloze": 1607392321,
-            "enhanced_cloze": 1607392322
+            "quizify_enhanced_cloze": 1607392322
         }
         
         # 预定义的牌组ID

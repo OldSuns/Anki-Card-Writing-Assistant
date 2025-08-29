@@ -52,7 +52,7 @@ cp config.json.example config.json
 python main.py --content "你的学习内容" --template Quizify
 
 # 从文件生成
-python main.py --file "your-file.docx" --template Enhanced Cloze
+python main.py --file "your-file.docx" --template "Quizify Enhanced Cloze"
 
 # 查看可用模板
 python main.py --list-templates
@@ -85,7 +85,7 @@ Anki Card Writing Assistant/
 │   └── web/                  # Web界面
 ├── Card Template/            # 卡片模板
 │   ├── Quizify/              # Quizify模板
-│   └── Enhanced Cloze/       # 增强填空模板
+│   └── Quizify Enhanced Cloze/       # 增强填空模板
 ├── output/                   # 导出文件目录
 ├── logs/                     # 日志文件
 ├── main.py                   # 主程序入口

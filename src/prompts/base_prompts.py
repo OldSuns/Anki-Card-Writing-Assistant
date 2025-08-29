@@ -1,7 +1,7 @@
 """
 提示词管理器模块
 负责管理不同类型的提示词模板，支持多种语言和难度级别
-按模板（如 Quizify / Enhanced Cloze）从子目录读取与保存。
+按模板（如 Quizify / Quizify Enhanced Cloze）从子目录读取与保存。
 """
 
 import json
@@ -33,12 +33,12 @@ class BasePromptManager:
         # 模板与文件夹名映射
         self.template_dir_map: Dict[str, str] = {
             "Quizify": "quizify",
-            "Enhanced Cloze": "enhanced_cloze"
+            "Quizify Enhanced Cloze": "enhanced_cloze"
         }
         # 每个模板允许的提示词键
         self.allowed_prompts_for_template: Dict[str, List[str]] = {
             "Quizify": ["cloze", "multiple_choice"],
-            "Enhanced Cloze": ["cloze"]
+            "Quizify Enhanced Cloze": ["enhanced_cloze"]
         }
     
     def _load_prompts_from_files(self):
@@ -51,6 +51,14 @@ class BasePromptManager:
             "cloze": {
                 "name": "填空卡片",
                 "description": "生成填空类型的记忆卡片",
+                "language": "zh-CN",
+                "difficulty": "medium",
+                "category": "cloze",
+                "variables": ["card_count", "template_name", "content"]
+            },
+            "enhanced_cloze": {
+                "name": "增强填空卡片",
+                "description": "生成增强填空类型的记忆卡片",
                 "language": "zh-CN",
                 "difficulty": "medium",
                 "category": "cloze",
@@ -205,6 +213,14 @@ class BasePromptManager:
             "cloze": {
                 "name": "填空卡片",
                 "description": "生成填空类型的记忆卡片",
+                "language": "zh-CN",
+                "difficulty": "medium",
+                "category": "cloze",
+                "variables": ["card_count", "template_name", "content"]
+            },
+            "enhanced_cloze": {
+                "name": "增强填空卡片",
+                "description": "生成增强填空类型的记忆卡片",
                 "language": "zh-CN",
                 "difficulty": "medium",
                 "category": "cloze",

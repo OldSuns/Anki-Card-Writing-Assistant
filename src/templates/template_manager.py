@@ -89,7 +89,7 @@ class TemplateManager:
     
     def _load_enhanced_cloze_templates(self):
         """加载增强填空模板"""
-        cloze_dir = self.template_dir / "Enhanced Cloze"
+        cloze_dir = self.template_dir / "Quizify Enhanced Cloze"
         if not cloze_dir.exists():
             self.logger.warning(f"增强填空模板目录不存在: {cloze_dir}")
             return
@@ -101,7 +101,7 @@ class TemplateManager:
         
         # 创建增强填空模板
         enhanced_cloze_template = AnkiTemplate(
-            name="Enhanced Cloze",
+            name="Quizify Enhanced Cloze",
             description="增强填空模板，支持提示、动画等高级功能",
             fields=[
                 TemplateField("Content", True, "", "包含填空的内容"),
@@ -117,7 +117,7 @@ class TemplateManager:
             cloze_fields=["Content"]
         )
         
-        self.templates["Enhanced Cloze"] = enhanced_cloze_template
+        self.templates["Quizify Enhanced Cloze"] = enhanced_cloze_template
     
     def get_template(self, name: str) -> Optional[AnkiTemplate]:
         """获取模板"""
