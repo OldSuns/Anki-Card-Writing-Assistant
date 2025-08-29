@@ -1,0 +1,23 @@
+services:
+  app:
+    image: ghcr.io/oldsuns/anki-card-writing-assistant:latest
+
+    env_file:
+      - .env
+
+    ports:
+      - "5000:5000"
+
+    volumes:
+      - ./output:/app/output
+      - ./logs:/app/logs
+
+    restart: unless-stopped
+
+    # 可选：覆盖默认入口参数
+    # command: ["/app/docker-entrypoint.sh"]
+
+# 可选：定义本地命名卷（若不想用相对路径）
+# volumes:
+#   output:
+#   logs:
