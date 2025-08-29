@@ -303,14 +303,12 @@ python main.py -f notes.md -t "Quizify Enhanced Cloze" -p cloze -e json html
 
 ## 版本记录
 
-v1.1.0（2025-08-29）
+v1.0.0（2025-08-29）
 - 新增 Docker 和 Docker Compose 支持
 - 支持环境变量配置，无需手动编辑 config.json
 - 提供 GHCR 镜像托管，支持自动构建和推送
 - 新增 env.example 配置文件示例
 - 优化容器化部署体验
-
-v1.0.0（2025-08-29）
-- 初始版本，提供 CLI 与 Web 使用方式
+- 提供 CLI 与 Web 使用方式
 - 支持多模板与多格式导出
 - 提供历史记录与下载
