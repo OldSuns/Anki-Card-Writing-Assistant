@@ -24,7 +24,14 @@ class WebApp:
         self.app = Flask(__name__)
         self.app.config['SECRET_KEY'] = 'anki-card-assistant-secret-key'
         CORS(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        # 配置SocketIO以更好地处理异步操作
+        self.socketio = SocketIO(
+            self.app, 
+            cors_allowed_origins="*",
+            async_mode='threading',  # 使用线程模式避免事件循环冲突
+            logger=True,
+            engineio_logger=True
+        )
         
         # 使用传入的助手实例
         self.assistant = assistant
@@ -127,6 +134,11 @@ class WebApp:
         def index():
             """主页"""
             return render_template('index.html')
+        
+        @self.app.route('/favicon.ico')
+        def favicon():
+            """Favicon图标"""
+            return send_from_directory(self.app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
         
         @self.app.route('/api/templates')
         def get_templates():
@@ -1185,12 +1197,26 @@ class WebApp:
     
     def _run_async_task(self, coro):
         """运行异步任务的辅助方法"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        import concurrent.futures
+        
+        # 使用线程池来运行异步任务，避免事件循环冲突
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(self._run_coro_in_thread, coro)
+            return future.result()
+    
+    def _run_coro_in_thread(self, coro):
+        """在线程中运行协程"""
         try:
-            return loop.run_until_complete(coro)
-        finally:
-            loop.close()
+            # 在新线程中创建新的事件循环
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        except Exception as e:
+            self.logger.error(f"在线程中运行协程失败: {e}")
+            raise
     
     def _is_cloudflare_error(self, error_text: str) -> bool:
         """检查是否为Cloudflare错误"""
