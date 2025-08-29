@@ -39,6 +39,7 @@ Thumbs.db
 # 配置与本地说明（容器运行时由环境变量生成）
 config.json
 CLAUDE.md
+.env
 
 # Notebook/临时
 *.ipynb_checkpoints
