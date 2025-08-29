@@ -35,7 +35,93 @@ main.py                        # 入口：CLI 与 Web 启动器
 
 ## 安装与运行
 
-### 环境依赖
+### 方式一：Docker 部署（推荐）
+
+#### 快速开始
+
+1. **克隆仓库**：
+```bash
+git clone https://github.com/OldSuns/Anki-Card-Writing-Assistant.git
+cd Anki-Card-Writing-Assistant
+```
+
+2. **配置环境变量**：
+```bash
+# 复制环境变量示例文件
+cp env.example .env
+
+# 编辑 .env 文件，填入你的 API 密钥
+LLM_API_KEY=your_openai_api_key_here
+```
+
+3. **启动服务**：
+```bash
+# 使用 Docker Compose（推荐）
+docker-compose up -d
+
+# 或使用 Docker 命令
+docker run -d --name anki-card-assistant \
+  --env-file .env \
+  -p 5000:5000 \
+  -v $(pwd)/output:/app/output \
+  -v $(pwd)/logs:/app/logs \
+  ghcr.io/oldsuns/anki-card-writing-assistant:latest
+```
+
+4. **访问应用**：
+打开浏览器访问 `http://localhost:5000`
+
+#### 环境变量配置
+
+复制 `env.example` 为 `.env` 并配置以下关键参数：
+
+```env
+# 必需：API 密钥
+LLM_API_KEY=your_openai_api_key_here
+
+# 可选：API 配置
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-3.5-turbo
+LLM_TEMPERATURE=0.7
+
+# 可选：生成配置
+GEN_DEFAULT_DIFFICULTY=medium
+GEN_DEFAULT_CARD_COUNT=1
+
+# 可选：Web 服务配置
+PORT=5000
+FLASK_DEBUG=false
+```
+
+#### Docker Compose 管理
+
+```bash
+# 启动服务
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+
+# 重启服务
+docker-compose restart
+
+# 更新镜像
+docker-compose pull
+docker-compose up -d
+```
+
+#### 数据持久化
+
+- **输出文件**：挂载到 `./output` 目录
+- **日志文件**：挂载到 `./logs` 目录
+- **配置**：通过环境变量注入，容器重启后自动重新生成
+
+### 方式二：本地安装
+
+#### 环境依赖
 
 ```bash
 pip install -r requirements.txt
@@ -43,7 +129,7 @@ pip install -r requirements.txt
 pip install -r requirements-dev.txt
 ```
 
-### 初始化配置
+#### 初始化配置
 
 ```bash
 cp config.json.example config.json
@@ -155,6 +241,29 @@ python main.py -f notes.md -t "Quizify Enhanced Cloze" -p cloze -e json html
 
 ## 故障排除
 
+### Docker 相关问题
+
+1) 容器启动失败
+- 检查 Docker 和 Docker Compose 是否正确安装
+- 确认 `.env` 文件存在且格式正确
+- 查看容器日志：`docker-compose logs` 或 `docker logs anki-card-assistant`
+
+2) 无法访问 Web 界面
+- 确认端口 5000 未被占用：`netstat -an | grep 5000`
+- 检查防火墙设置，确保端口 5000 已开放
+- 尝试访问 `http://127.0.0.1:5000` 或 `http://localhost:5000`
+
+3) 环境变量未生效
+- 确认 `.env` 文件在项目根目录
+- 重启容器：`docker-compose restart`
+- 检查环境变量：`docker-compose exec app env | grep LLM`
+
+4) 数据持久化问题
+- 确认 `output/` 和 `logs/` 目录存在且有写入权限
+- 检查卷挂载：`docker inspect anki-card-assistant | grep -A 10 Mounts`
+
+### 应用相关问题
+
 1) LLM 请求被拦截或返回 HTML 页面
 - 若使用第三方反代域名，可能存在 Cloudflare 人机验证或网关返回 HTML。请将 `llm.base_url` 改为可直连的后端 API 域名（如官方 `https://api.openai.com/v1` 或服务商提供的后端域名）。
 
@@ -169,7 +278,10 @@ python main.py -f notes.md -t "Quizify Enhanced Cloze" -p cloze -e json html
 - 检查磁盘空间与目录权限
 - 确认导出格式书写正确；`json` 会被强制加入导出列表
 
-日志位置：`logs/app.log`。
+### 日志查看
+
+- **Docker 容器日志**：`docker-compose logs -f` 或 `docker logs anki-card-assistant`
+- **应用日志**：`logs/app.log`（本地安装）或容器内 `/app/logs/app.log`
 
 ## 二次开发
 
@@ -190,6 +302,13 @@ python main.py -f notes.md -t "Quizify Enhanced Cloze" -p cloze -e json html
 本项目采用 MIT 许可证。详见 `LICENSE` 文件。
 
 ## 版本记录
+
+v1.1.0（2025-08-29）
+- 新增 Docker 和 Docker Compose 支持
+- 支持环境变量配置，无需手动编辑 config.json
+- 提供 GHCR 镜像托管，支持自动构建和推送
+- 新增 env.example 配置文件示例
+- 优化容器化部署体验
 
 v1.0.0（2025-08-29）
 - 初始版本，提供 CLI 与 Web 使用方式
