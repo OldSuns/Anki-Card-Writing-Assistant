@@ -10,9 +10,7 @@ import hashlib
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 from datetime import datetime
-import zipfile
-import tempfile
-import shutil
+
 
 import genanki
 from genanki import Model, Deck, Note, Package
@@ -40,6 +38,27 @@ class UnifiedExporter:
         # 预定义的牌组ID
         self.deck_ids = {}
     
+    def _normalize_newlines_for_anki(self, text: Any) -> str:
+        """将内容中的换行统一为适合Anki渲染的HTML换行。
+        处理场景：
+        - 字面量 "\n"（反斜杠+n）未被渲染为换行
+        - 实际换行符需要在HTML中显示
+        策略：统一替换为 <br>。
+        """
+        if text is None:
+            return ""
+        s = str(text)
+        # 归一化平台换行
+        s = s.replace("\r\n", "\n").replace("\r", "\n")
+        # 先将字面量 \n 转为统一占位换行
+        # 注意：\\n 表示文本里真的包含反斜杠+n
+        if "\\n" in s:
+            s = s.replace("\\n", "\n")
+        # 将实际换行替换为 <br>
+        if "\n" in s:
+            s = s.replace("\n", "<br>")
+        return s
+
     def export_multiple_formats(self, cards: List[CardData], formats: List[str], 
                                original_content: str = None, generation_config: Dict = None) -> Dict[str, str]:
         """导出多种格式"""
@@ -451,22 +470,24 @@ class UnifiedExporter:
         
         return model
     
-    def _create_custom_model(self, template: AnkiTemplate) -> Model:
-        """创建自定义模型（兼容性保留）"""
-        return self._create_model_from_template(template)
-    
     def _create_note(self, card: CardData, model: Model) -> Note:
         """创建笔记"""
         # 根据模型类型创建不同的笔记
         if 'cloze' in model.name.lower():
             return Note(
                 model=model,
-                fields=[card.fields.get('Text', ''), card.fields.get('Back Extra', '')]
+                fields=[
+                    self._normalize_newlines_for_anki(card.fields.get('Text', '')),
+                    self._normalize_newlines_for_anki(card.fields.get('Back Extra', ''))
+                ]
             )
         else:
             return Note(
                 model=model,
-                fields=[card.fields.get('Front', ''), card.fields.get('Back', '')]
+                fields=[
+                    self._normalize_newlines_for_anki(card.fields.get('Front', '')),
+                    self._normalize_newlines_for_anki(card.fields.get('Back', ''))
+                ]
             )
     
     def _create_note_from_template(self, card: CardData, model: Model, template: AnkiTemplate) -> Note:
@@ -504,7 +525,8 @@ class UnifiedExporter:
             if field_value is None:
                 field_value = field.default_value or ""
             
-            fields.append(str(field_value))
+            # 统一处理换行，避免 "\n" 在 Anki 中不换行
+            fields.append(self._normalize_newlines_for_anki(field_value))
         
         # 调试信息
         self.logger.debug(f"创建笔记，模板: {template.name}，字段数量: {len(fields)}")

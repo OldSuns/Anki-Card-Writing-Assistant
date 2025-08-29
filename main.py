@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import asyncio
 import argparse
-import json
 import logging
 import sys
 from pathlib import Path
@@ -18,6 +17,13 @@ from src.prompts.base_prompts import BasePromptManager
 from src.utils.config_manager import ConfigManager
 from src.utils.file_processor import FileProcessor
 
+# 应用常量
+DEFAULT_TEMPLATE = "Quizify"  # 默认卡片模板
+DEFAULT_PROMPT_TYPE = "cloze"  # 默认提示词类型
+DEFAULT_EXPORT_FORMATS = ["json", "apkg"]  # 默认导出格式
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"  # 日志格式
+MAX_LOG_SIZE = 10 * 1024 * 1024  # 日志文件最大大小 (10MB)
+
 class AnkiCardAssistant:
     """Anki写卡助手主类"""
     
@@ -27,11 +33,7 @@ class AnkiCardAssistant:
         self.config_manager = ConfigManager(config_file_path)
         self.config = self.config_manager.get_config()
         
-        # 加载用户级设置（持久化）
-        try:
-            self.load_user_settings()
-        except Exception as e:
-            print(f"警告：加载用户设置失败：{e}")
+        # 配置已通过ConfigManager加载
         
         # 设置日志
         self._setup_logging()
@@ -56,23 +58,8 @@ class AnkiCardAssistant:
         self.logger.info("Anki写卡助手初始化完成")
     
     
-    # ---------- 持久化用户设置 ----------
-    def get_user_settings_path(self) -> Path:
-        """获取用户设置文件路径"""
-        # 直接使用静态方法，避免实例化引发不存在文件的日志
-        user_dir = ConfigManager.get_user_config_dir()
-        return user_dir / "settings.json"
-
-    def load_user_settings(self):
-        """加载用户设置并合并到内存配置"""
-        # LLM配置现在直接存储在config.json中，无需额外加载
-        # 此方法保留以兼容性，但不再执行任何操作
-        pass
-
     def save_user_settings(self):
         """将当前设置持久化到配置文件"""
-        # LLM配置现在直接存储在config.json中
-        # 保存配置到文件
         self.config_manager.save_config()
     
     def _setup_logging(self):
@@ -81,29 +68,22 @@ class AnkiCardAssistant:
         log_path = Path("logs/app.log")
         log_path.parent.mkdir(exist_ok=True)
         
-        # 配置日志格式
-        log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-        
         # 配置根日志器
         logging.basicConfig(
             level=logging.INFO,
-            format=log_format,
+            format=LOG_FORMAT,
             handlers=[]
         )
         
         # 添加处理器
-        handlers = []
-        handlers.append(logging.StreamHandler())
-        
         from logging.handlers import RotatingFileHandler
-        handlers.append(RotatingFileHandler(
-            log_path,
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5
-        ))
+        handlers = [
+            logging.StreamHandler(),
+            RotatingFileHandler(log_path, maxBytes=MAX_LOG_SIZE, backupCount=5)
+        ]
         
         # 为所有处理器设置格式
-        formatter = logging.Formatter(log_format)
+        formatter = logging.Formatter(LOG_FORMAT)
         for handler in handlers:
             handler.setFormatter(formatter)
             logging.getLogger().addHandler(handler)
@@ -168,8 +148,8 @@ class AnkiCardAssistant:
         """生成卡片"""
         if config is None:
             config = GenerationConfig(
-                template_name="Quizify",  # 默认使用Quizify模板
-                prompt_type="cloze",      # 默认使用cloze提示词
+                template_name=DEFAULT_TEMPLATE,
+                prompt_type=DEFAULT_PROMPT_TYPE,
                 temperature=self.config["llm"]["temperature"],
                 max_tokens=self.config["llm"]["max_tokens"],
                 card_count=self.config["generation"]["default_card_count"]
@@ -195,23 +175,7 @@ class AnkiCardAssistant:
     
     def export_cards(self, cards: list, formats: Optional[list] = None, original_content: str = None, generation_config: Dict = None) -> dict:
         """导出卡片"""
-        # 确保 formats 是有效的格式列表
-        if formats is None:
-            formats = self.config["export"]["default_formats"].copy()  # 使用副本避免修改原始配置
-        else:
-            # 验证传入的格式参数
-            if not isinstance(formats, list):
-                formats = self.config["export"]["default_formats"].copy()
-            else:
-                # 过滤掉无效的格式
-                valid_formats = []
-                for fmt in formats:
-                    if isinstance(fmt, str) and fmt in ['json', 'csv', 'apkg', 'txt', 'html']:
-                        valid_formats.append(fmt)
-                formats = valid_formats if valid_formats else self.config["export"]["default_formats"].copy()
-        # 强制包含 json
-        if 'json' not in formats:
-            formats.insert(0, 'json')
+        formats = self._validate_export_formats(formats)
         
         try:
             export_paths = self.exporter.export_multiple_formats(
@@ -223,6 +187,23 @@ class AnkiCardAssistant:
         except Exception as e:
             self.logger.error(f"导出卡片失败: {e}")
             raise
+    
+    def _validate_export_formats(self, formats: Optional[list]) -> list:
+        """验证并规范化导出格式列表"""
+        valid_formats = ['json', 'csv', 'apkg', 'txt', 'html']
+        
+        if formats is None or not isinstance(formats, list):
+            formats = self.config["export"]["default_formats"].copy()
+        else:
+            formats = [fmt for fmt in formats if isinstance(fmt, str) and fmt in valid_formats]
+            if not formats:
+                formats = self.config["export"]["default_formats"].copy()
+        
+        # 强制包含 json
+        if 'json' not in formats:
+            formats.insert(0, 'json')
+        
+        return formats
     
     def list_templates(self) -> list:
         """列出可用模板"""
@@ -388,8 +369,8 @@ async def main():
     
     # 构建生成配置
     config = GenerationConfig(
-        template_name=args.template or "Quizify",  # 默认使用Quizify模板
-        prompt_type=args.prompt or "cloze",        # 默认使用cloze提示词
+        template_name=args.template or DEFAULT_TEMPLATE,
+        prompt_type=args.prompt or DEFAULT_PROMPT_TYPE,
         card_count=args.count or assistant.config["generation"]["default_card_count"]
     )
     

@@ -41,13 +41,9 @@ class BasePromptManager:
             "Quizify Enhanced Cloze": ["enhanced_cloze"]
         }
     
-    def _load_prompts_from_files(self):
-        """从markdown文件加载提示词模板"""
-        # 确保提示词目录存在
-        self.prompts_directory.mkdir(exist_ok=True)
-        
-        # 基础提示词配置（元数据）
-        base_prompts_config = {
+    def _get_base_prompts_config(self) -> Dict[str, Dict[str, Any]]:
+        """获取基础提示词配置（避免重复定义）"""
+        return {
             "cloze": {
                 "name": "填空卡片",
                 "description": "生成填空类型的记忆卡片",
@@ -73,6 +69,14 @@ class BasePromptManager:
                 "variables": ["card_count", "template_name", "content"]
             }
         }
+    
+    def _load_prompts_from_files(self):
+        """从markdown文件加载提示词模板"""
+        # 确保提示词目录存在
+        self.prompts_directory.mkdir(exist_ok=True)
+        
+        # 基础提示词配置（元数据）
+        base_prompts_config = self._get_base_prompts_config()
         
         # 先遍历目录（最多两层）加载模板
         loaded_keys = set()
@@ -209,32 +213,7 @@ class BasePromptManager:
         names: List[str] = []
         
         # 基础提示词配置（元数据）用于名称映射
-        base_prompts_config = {
-            "cloze": {
-                "name": "填空卡片",
-                "description": "生成填空类型的记忆卡片",
-                "language": "zh-CN",
-                "difficulty": "medium",
-                "category": "cloze",
-                "variables": ["card_count", "template_name", "content"]
-            },
-            "enhanced_cloze": {
-                "name": "增强填空卡片",
-                "description": "生成增强填空类型的记忆卡片",
-                "language": "zh-CN",
-                "difficulty": "medium",
-                "category": "cloze",
-                "variables": ["card_count", "template_name", "content"]
-            },
-            "multiple_choice": {
-                "name": "选择题卡片",
-                "description": "生成包含选项与解析的选择题卡片（支持多选）",
-                "language": "zh-CN",
-                "difficulty": "medium",
-                "category": "standard",
-                "variables": ["card_count", "template_name", "content"]
-            }
-        }
+        base_prompts_config = self._get_base_prompts_config()
         
         for key in keys:
             if key in self.prompts:

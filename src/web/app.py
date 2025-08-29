@@ -41,6 +41,24 @@ class WebApp:
         self._register_routes()
         self._register_socket_events()
     
+    def _handle_api_error(self, operation: str, error: Exception, status_code: int = 500):
+        """统一的API错误处理"""
+        error_msg = str(error)
+        self.logger.error(f"{operation}失败: {error_msg}")
+        return jsonify({
+            'success': False,
+            'error': error_msg
+        }), status_code
+    
+    def _success_response(self, data: Any = None, message: str = None):
+        """统一的成功响应格式"""
+        response = {'success': True}
+        if data is not None:
+            response['data'] = data
+        if message:
+            response['message'] = message
+        return jsonify(response)
+    
     def _format_content_preview(self, content_preview):
         """安全地格式化内容预览"""
         if content_preview is None:
@@ -115,16 +133,9 @@ class WebApp:
             """获取可用模板"""
             try:
                 templates = self.assistant.list_templates()
-                return jsonify({
-                    'success': True,
-                    'data': templates
-                })
+                return self._success_response(data=templates)
             except Exception as e:
-                self.logger.error(f"获取模板失败: {e}")
-                return jsonify({
-                    'success': False,
-                    'error': str(e)
-                }), 500
+                return self._handle_api_error("获取模板", e)
         
         @self.app.route('/api/prompts')
         def get_prompts():
@@ -133,16 +144,9 @@ class WebApp:
                 category = request.args.get('category')
                 template_name = request.args.get('template')
                 prompts = self.assistant.list_prompts(category=category, template_name=template_name)
-                return jsonify({
-                    'success': True,
-                    'data': prompts
-                })
+                return self._success_response(data=prompts)
             except Exception as e:
-                self.logger.error(f"获取提示词失败: {e}")
-                return jsonify({
-                    'success': False,
-                    'error': str(e)
-                }), 500
+                return self._handle_api_error("获取提示词", e)
         
         @self.app.route('/api/prompt-names')
         def get_prompt_names():
@@ -151,16 +155,9 @@ class WebApp:
                 category = request.args.get('category')
                 template_name = request.args.get('template')
                 prompt_names = self.assistant.list_prompt_names(category=category, template_name=template_name)
-                return jsonify({
-                    'success': True,
-                    'data': prompt_names
-                })
+                return self._success_response(data=prompt_names)
             except Exception as e:
-                self.logger.error(f"获取提示词名称失败: {e}")
-                return jsonify({
-                    'success': False,
-                    'error': str(e)
-                }), 500
+                return self._handle_api_error("获取提示词名称", e)
         
         @self.app.route('/api/prompt-content')
         def get_prompt_content():
@@ -254,16 +251,9 @@ class WebApp:
             """获取可用LLM客户端"""
             try:
                 clients = self.assistant.list_llm_clients()
-                return jsonify({
-                    'success': True,
-                    'data': clients
-                })
+                return self._success_response(data=clients)
             except Exception as e:
-                self.logger.error(f"获取LLM客户端失败: {e}")
-                return jsonify({
-                    'success': False,
-                    'error': str(e)
-                }), 500
+                return self._handle_api_error("获取LLM客户端", e)
         
         @self.app.route('/api/generate', methods=['POST'])
         def generate_cards():
@@ -484,16 +474,9 @@ class WebApp:
             """获取支持的文件类型"""
             try:
                 extensions = self.file_processor.get_supported_extensions()
-                return jsonify({
-                    'success': True,
-                    'data': extensions
-                })
+                return self._success_response(data=extensions)
             except Exception as e:
-                self.logger.error(f"获取支持的文件类型失败: {e}")
-                return jsonify({
-                    'success': False,
-                    'error': str(e)
-                }), 500
+                return self._handle_api_error("获取支持的文件类型", e)
         
         @self.app.route('/api/settings')
         def get_settings():
