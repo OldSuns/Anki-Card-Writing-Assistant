@@ -1,0 +1,59 @@
+# 基于 .gitignore，并补充 Docker 相关忽略
+
+# Python 缓存与编译产物
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 包与构建产物
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# 虚拟环境与依赖管理
+.venv/
+venv/
+env/
+ENV/
+
+# 日志与输出（容器内映射到卷，不需打包）
+logs/
+output/
+*.log
+
+# 测试与类型检查缓存
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# 编辑器/系统文件
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# 配置与本地说明（容器运行时由环境变量生成）
+config.json
+CLAUDE.md
+
+# Notebook/临时
+*.ipynb_checkpoints
+
+# Git
+.git
+.gitignore
+
+# Docker 自身
+Dockerfile
+docker-compose.yml
+
+# Node/Web 构建产物（如有）
+node_modules/
+**/node_modules/
+
+# 用户自定义提示词（可按需忽略）
+# src/prompts/*_user.md
