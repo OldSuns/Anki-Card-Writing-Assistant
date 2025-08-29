@@ -28,7 +28,7 @@ setup(
     description="基于大语言模型的Anki记忆卡片生成工具",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/your-username/anki-card-writing-assistant",
+    url="https://github.com/oldsuns/anki-card-writing-assistant",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -75,8 +75,8 @@ setup(
     },
     keywords="anki, flashcards, memory, learning, ai, llm, education",
     project_urls={
-        "Bug Reports": "https://github.com/your-username/anki-card-writing-assistant/issues",
-        "Source": "https://github.com/your-username/anki-card-writing-assistant",
-        "Documentation": "https://anki-card-writing-assistant.readthedocs.io/",
+        "Bug Reports": "https://github.com/oldsuns/anki-card-writing-assistant/issues",
+        "Source": "https://github.com/oldsuns/anki-card-writing-assistant",
+        "Documentation": "https://github.com/oldsuns/anki-card-writing-assistant",
     },
 )

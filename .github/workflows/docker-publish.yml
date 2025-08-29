@@ -5,6 +5,15 @@ on:
     branches: [ "main" ]
     tags: [ "v*" ]
   workflow_dispatch:
+    inputs:
+      custom_version:
+        description: '自定义版本号 (例如: 1.2.3)'
+        required: false
+        default: ''
+      custom_name:
+        description: '自定义版本名称 (例如: stable, beta, alpha)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -30,11 +39,48 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 设置版本信息
+        id: version
+        run: |
+          # 获取Git标签版本
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            # 使用手动输入的版本号或默认版本
+            VERSION="${{ github.event.inputs.custom_version }}"
+            if [ -z "$VERSION" ]; then
+              VERSION="$(date +%Y%m%d)-$(git rev-parse --short HEAD)"
+            fi
+          fi
+          
+          # 设置版本名称
+          VERSION_NAME="${{ github.event.inputs.custom_name }}"
+          if [ -z "$VERSION_NAME" ]; then
+            if [[ $GITHUB_REF == refs/tags/* ]]; then
+              VERSION_NAME="release"
+            else
+              VERSION_NAME="dev"
+            fi
+          fi
+          
+          # 将仓库名称转换为小写
+          REPO_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "full_tag=ghcr.io/$REPO_NAME:$VERSION-$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "latest_tag=ghcr.io/$REPO_NAME:latest" >> $GITHUB_OUTPUT
+          echo "repo_name=$REPO_NAME" >> $GITHUB_OUTPUT
+          
+          echo "构建版本: $VERSION"
+          echo "版本名称: $VERSION_NAME"
+          echo "完整标签: ghcr.io/$REPO_NAME:$VERSION-$VERSION_NAME"
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ steps.version.outputs.repo_name }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -48,5 +94,11 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ steps.version.outputs.full_tag }}
+            ${{ steps.version.outputs.latest_tag }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.description=Anki Card Writing Assistant - ${{ steps.version.outputs.version_name }} version

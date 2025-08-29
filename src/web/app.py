@@ -1181,7 +1181,7 @@ class WebApp:
         """运行Web应用"""
         self.logger.info(f"启动Web服务器: http://{host}:{port}")
         # 在调试模式下启用自动重载
-        self.socketio.run(self.app, host=host, port=port, debug=debug, use_reloader=debug)
+        self.socketio.run(self.app, host=host, port=port, debug=debug, use_reloader=debug, allow_unsafe_werkzeug=True)
     
     def _run_async_task(self, coro):
         """运行异步任务的辅助方法"""
