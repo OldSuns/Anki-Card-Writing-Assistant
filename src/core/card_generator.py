@@ -3,17 +3,15 @@
 负责根据模板和LLM生成内容创建Anki卡片
 """
 
-import json
 import logging
+import re
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
-from pathlib import Path
-import re
-
 
 from .llm_client import LLMManager
 from ..prompts.base_prompts import BasePromptManager
 from ..templates.template_manager import TemplateManager
+
 
 @dataclass
 class CardData:
@@ -38,6 +36,18 @@ class CardData:
             "cloze_data": self.cloze_data
         }
 
+
+@dataclass
+class CardFieldParams:
+    """卡片字段参数"""
+    template: Any
+    cloze_content: str
+    card_data: Dict
+    deck_name: str
+    is_quizify: bool
+    is_cloze: bool
+
+
 @dataclass
 class GenerationConfig:
     """生成配置"""
@@ -49,17 +59,18 @@ class GenerationConfig:
     custom_deck_name: Optional[str] = None
     difficulty: str = "medium"  # 添加难度参数：easy, medium, hard
 
+
 class CardGenerator:
     """卡片生成器"""
-    
-    def __init__(self, llm_manager: LLMManager, 
+
+    def __init__(self, llm_manager: LLMManager,
                  template_manager: TemplateManager,
                  prompt_manager: BasePromptManager):
         self.llm_manager = llm_manager
         self.template_manager = template_manager
         self.prompt_manager = prompt_manager
         self.logger = logging.getLogger(__name__)
-    
+
     async def generate_cards(self, content: str, config: GenerationConfig) -> List[CardData]:
         """生成卡片列表"""
         try:
@@ -67,21 +78,21 @@ class CardGenerator:
             template = self.template_manager.get_template(config.template_name)
             if not template:
                 raise ValueError(f"未找到模板: {config.template_name}")
-            
+
             # 根据模板名称确定提示词类型
-            effective_prompt_type = config.prompt_type
-            if config.template_name == "Quizify Enhanced Cloze" and config.prompt_type == "cloze":
-                effective_prompt_type = "enhanced_cloze"
-            
+            effective_prompt_type = self._get_effective_prompt_type(
+                config
+            )
+
             # 获取提示词
             prompt = self.prompt_manager.get_prompt(
                 effective_prompt_type,
                 template_name=template.name
             )
-            
+
             # 构建完整提示词
             full_prompt = self._build_prompt(prompt, content, config)
-            
+
             # 根据提示词类型选择生成方法
             if effective_prompt_type in ['cloze', 'enhanced_cloze']:
                 cards = await self._generate_cloze_cards(
@@ -91,14 +102,21 @@ class CardGenerator:
                 cards = await self._generate_standard_cards(
                     self.llm_manager, full_prompt, template, config
                 )
-            
-            self.logger.info(f"成功生成 {len(cards)} 张卡片")
+
+            self.logger.info("成功生成 %d 张卡片", len(cards))
             return cards
-            
+
         except Exception as e:
-            self.logger.error(f"生成卡片失败: {e}")
+            self.logger.error("生成卡片失败: %s", e)
             raise
-    
+
+    def _get_effective_prompt_type(self, config: GenerationConfig) -> str:
+        """获取有效的提示词类型"""
+        if (config.template_name == "Quizify Enhanced Cloze" and
+                config.prompt_type == "cloze"):
+            return "enhanced_cloze"
+        return config.prompt_type
+
     async def _generate_standard_cards(self, llm_client: LLMManager,
                                      prompt: str, template, config: GenerationConfig) -> List[CardData]:
         """生成标准卡片"""
@@ -122,20 +140,20 @@ class CardGenerator:
             },
             "required": ["cards"]
         }
-        
+
         # 生成结构化内容
         response = await llm_client.generate_structured(
             prompt, schema,
             temperature=config.temperature,
             max_tokens=config.max_tokens
         )
-        
+
         # 转换为CardData对象
         cards = []
         for card_data in response.get("cards", []):
             # 使用用户指定的deck名称或AI生成的名称
             deck_name = config.custom_deck_name or card_data["deck"]
-            
+
             card = CardData(
                 front=card_data["front"],
                 back=card_data["back"],
@@ -150,11 +168,13 @@ class CardGenerator:
                 }
             )
             cards.append(card)
-        
+
         return cards
-    
-    async def _generate_cloze_cards(self, llm_client: LLMManager,
-                                  prompt: str, template, config: GenerationConfig) -> List[CardData]:
+
+    async def _generate_cloze_cards(
+        self, llm_client: LLMManager,
+        prompt: str, template, config: GenerationConfig
+    ) -> List[CardData]:
         """生成填空卡片（兼容增强填空 {{ }} / 注释 / 更多内容 格式，以及旧式 clozes 数组）。"""
         # 定义填空卡片输出结构（clozes 可选）
         schema = {
@@ -186,143 +206,157 @@ class CardGenerator:
             },
             "required": ["cards"]
         }
-        
+
         # 生成结构化内容
         response = await llm_client.generate_structured(
             prompt, schema,
             temperature=config.temperature,
             max_tokens=config.max_tokens
         )
-        
+
         # 转换为CardData对象
         cards = []
         for card_data in response.get("cards", []):
-            content = card_data["content"]
-            clozes = card_data.get("clozes")
-            
-            # 处理填空内容
-            if clozes:
-                cloze_content = self._process_cloze_content(content, clozes)
-                cloze_meta = {"clozes": clozes, "original_content": content}
-            else:
-                cloze_content = content
-                cloze_meta = None
-            
-            # 使用用户指定的deck名称或AI生成的名称
-            deck_name = config.custom_deck_name or card_data["deck"]
-            
-            # 根据模板类型映射字段
-            is_quizify = getattr(template, 'name', '') == 'Quizify'
-            is_cloze = getattr(template, 'is_cloze', False)
-            
-            if is_cloze:
-                # 根据模板名称决定使用哪个字段
-                if template.name == "Quizify Enhanced Cloze":
-                    fields = {
-                        "Content": cloze_content,
-                        "Back Extra": card_data.get("back", ""),
-                        "Deck": deck_name,
-                        "Tags": " ".join(card_data["tags"]),
-                        "Cloze99": ""  # AnkiDroid兼容字段
-                    }
-                else:
-                    fields = {
-                        "Text": cloze_content,
-                        "Back Extra": card_data.get("back", ""),
-                        "Deck": deck_name,
-                        "Tags": " ".join(card_data["tags"])
-                    }
-            elif is_quizify:
-                # Quizify 模板：选择题需要背面解析，填空卡片背面为空
-                fields = {
-                    "Front": cloze_content,
-                    "Back": card_data.get("back", ""),
-                    "Deck": deck_name,
-                    "Tags": " ".join(card_data["tags"])
-                }
-            else:
-                fields = {
-                    "Front": cloze_content,
-                    "Back": cloze_content,
-                    "Deck": deck_name,
-                    "Tags": " ".join(card_data["tags"])
-                }
-
-            card = CardData(
-                front=cloze_content,
-                back="" if is_quizify and not is_cloze else cloze_content,
-                deck=deck_name,
-                tags=card_data["tags"],
-                model=template.name,
-                fields=fields,
-                cloze_data=cloze_meta
-            )
+            card = self._create_cloze_card(card_data, template, config)
             cards.append(card)
-        
+
         return cards
-    
+
+    def _create_cloze_card(self, card_data: Dict, template, config: GenerationConfig) -> CardData:
+        """创建填空卡片"""
+        content = card_data["content"]
+        clozes = card_data.get("clozes")
+
+        # 处理填空内容
+        if clozes:
+            cloze_content = self._process_cloze_content(content, clozes)
+            cloze_meta = {"clozes": clozes, "original_content": content}
+        else:
+            cloze_content = content
+            cloze_meta = None
+
+        # 使用用户指定的deck名称或AI生成的名称
+        deck_name = config.custom_deck_name or card_data["deck"]
+
+        # 根据模板类型映射字段
+        is_quizify = getattr(template, 'name', '') == 'Quizify'
+        is_cloze = getattr(template, 'is_cloze', False)
+
+        field_params = CardFieldParams(
+            template=template,
+            cloze_content=cloze_content,
+            card_data=card_data,
+            deck_name=deck_name,
+            is_quizify=is_quizify,
+            is_cloze=is_cloze
+        )
+        fields = self._build_card_fields(field_params)
+
+        return CardData(
+            front=cloze_content,
+            back="" if is_quizify and not is_cloze else cloze_content,
+            deck=deck_name,
+            tags=card_data["tags"],
+            model=template.name,
+            fields=fields,
+            cloze_data=cloze_meta
+        )
+
+    def _build_card_fields(self, params: CardFieldParams):
+        """构建卡片字段"""
+        if params.is_cloze:
+            # 根据模板名称决定使用哪个字段
+            if params.template.name == "Quizify Enhanced Cloze":
+                return {
+                    "Content": params.cloze_content,
+                    "Back Extra": params.card_data.get("back", ""),
+                    "Deck": params.deck_name,
+                    "Tags": " ".join(params.card_data["tags"]),
+                    "Cloze99": ""  # AnkiDroid兼容字段
+                }
+            return {
+                "Text": params.cloze_content,
+                "Back Extra": params.card_data.get("back", ""),
+                "Deck": params.deck_name,
+                "Tags": " ".join(params.card_data["tags"])
+            }
+        if params.is_quizify:
+            # Quizify 模板：选择题需要背面解析，填空卡片背面为空
+            return {
+                "Front": params.cloze_content,
+                "Back": params.card_data.get("back", ""),
+                "Deck": params.deck_name,
+                "Tags": " ".join(params.card_data["tags"])
+            }
+        return {
+            "Front": params.cloze_content,
+            "Back": params.cloze_content,
+            "Deck": params.deck_name,
+            "Tags": " ".join(params.card_data["tags"])
+        }
+
     def _process_cloze_content(self, content: str, clozes: List[Dict]) -> str:
         """处理填空内容，将文本转换为Anki填空格式"""
         processed_content = content
-        
+
         # 按位置排序填空，从后往前处理避免位置偏移
         sorted_clozes = sorted(clozes, key=lambda x: x.get("position", 0), reverse=True)
-        
+
         for cloze in sorted_clozes:
             text = cloze["text"]
             cloze_id = cloze["id"]
             hint = cloze.get("hint", "")
-            
+
             # 构建填空格式
             if hint:
                 cloze_format = f"{{{{c{cloze_id}::{text}::{hint}}}}}"
             else:
                 cloze_format = f"{{{{c{cloze_id}::{text}}}}}"
-            
+
             # 替换文本
             processed_content = processed_content.replace(text, cloze_format, 1)
-        
+
         return processed_content
-    
+
     def _build_prompt(self, base_prompt: str, content: str, config: GenerationConfig) -> str:
         """构建完整提示词"""
         # 难度映射
         difficulty_map = {
             "easy": "简单",
-            "medium": "中等", 
+            "medium": "中等",
             "hard": "困难"
         }
         difficulty_text = difficulty_map.get(config.difficulty, "中等")
-        
+
         prompt_parts = [
             base_prompt,
             f"\n\n内容：\n{content}",
-            f"\n\n要求：",
+            "\n\n要求：",
             f"- 生成 {config.card_count} 张卡片",
             f"- 难度级别：{difficulty_text}",
             f"- 使用模板：{config.template_name}"
         ]
-        
+
         # 如果用户指定了deck名称，添加到提示词中
         if config.custom_deck_name:
             prompt_parts.append(f"- 牌组名称：{config.custom_deck_name}")
-        
+
         return "\n".join(prompt_parts)
-    
+
     def validate_card(self, card: CardData) -> bool:
         """验证卡片数据"""
         if not card.front or not card.back:
             return False
-        
+
         if not card.deck:
             return False
-        
+
         # 检查填空格式（如果是填空卡片）
         if card.cloze_data and not self._validate_cloze_format(card.front):
             return False
-        
+
         return True
-    
+
     def _validate_cloze_format(self, content: str) -> bool:
         """验证填空格式：支持增强填空 {{...}} 和更多内容块。"""
         # 增强填空基本占位
@@ -332,7 +366,7 @@ class CardGenerator:
         if '[[更多内容::' in content:
             return True
         return False
-    
+
     def format_card_for_export(self, card: CardData) -> Dict[str, Any]:
         """格式化卡片用于导出"""
         return {
@@ -346,41 +380,45 @@ class CardGenerator:
             }
         }
 
+
 class BatchCardGenerator:
     """批量卡片生成器"""
-    
+
     def __init__(self, card_generator: CardGenerator):
         self.card_generator = card_generator
         self.logger = logging.getLogger(__name__)
-    
+
     async def generate_batch(self, contents: List[str], config: GenerationConfig) -> List[CardData]:
         """批量生成卡片"""
         all_cards = []
-        
+
         for i, content in enumerate(contents):
             try:
-                self.logger.info(f"处理第 {i+1}/{len(contents)} 个内容")
+                self.logger.info("处理第 %d/%d 个内容", i + 1, len(contents))
                 cards = await self.card_generator.generate_cards(content, config)
-                
+
                 # 验证返回的是卡片对象列表
                 if cards and not isinstance(cards[0], CardData):
-                    self.logger.error(f"card_generator.generate_cards 返回的不是卡片对象列表，而是: {type(cards[0])}")
+                    self.logger.error(
+                        "card_generator.generate_cards 返回的不是卡片对象列表，而是: %s",
+                        type(cards[0])
+                    )
                     continue
-                
+
                 all_cards.extend(cards)
             except Exception as e:
-                self.logger.error(f"处理第 {i+1} 个内容失败: {e}")
+                self.logger.error("处理第 %d 个内容失败: %s", i + 1, e)
                 continue
-        
-        self.logger.info(f"批量生成完成，共生成 {len(all_cards)} 张卡片")
+
+        self.logger.info("批量生成完成，共生成 %d 张卡片", len(all_cards))
         return all_cards
-    
+
     async def generate_from_file(self, file_path: str, config: GenerationConfig) -> List[CardData]:
         """从文件生成卡片"""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-            
+
             # 根据文件类型分割内容
             if file_path.endswith('.txt'):
                 contents = self._split_text_content(content)
@@ -388,21 +426,27 @@ class BatchCardGenerator:
                 contents = self._split_markdown_content(content)
             else:
                 contents = [content]
-            
+
             # 确保返回的是卡片列表，而不是内容列表
             cards = await self.generate_batch(contents, config)
-            
+
             # 验证返回的是卡片对象列表
             if cards and not isinstance(cards[0], CardData):
-                self.logger.error(f"generate_batch 返回的不是卡片对象列表，而是: {type(cards[0])}")
+                self.logger.error(
+                    "generate_batch 返回的不是卡片对象列表，而是: %s",
+                    type(cards[0])
+                )
                 raise ValueError(f"generate_batch 返回了错误的数据类型: {type(cards[0])}")
-            
+
             return cards
-            
-        except Exception as e:
-            self.logger.error(f"从文件生成卡片失败: {e}")
+
+        except (FileNotFoundError, PermissionError) as e:
+            self.logger.error("文件访问失败: %s", e)
             raise
-    
+        except Exception as e:
+            self.logger.error("从文件生成卡片失败: %s", e)
+            raise
+
     def _split_text_content(self, content: str) -> List[str]:
         """分割文本内容"""
         # 按段落分割
@@ -414,7 +458,7 @@ class BatchCardGenerator:
             if stripped:  # 只保留非空内容
                 valid_paragraphs.append(stripped)
         return valid_paragraphs
-    
+
     def _split_markdown_content(self, content: str) -> List[str]:
         """分割Markdown内容"""
         # 按标题分割
