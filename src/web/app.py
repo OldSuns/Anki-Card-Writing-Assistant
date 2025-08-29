@@ -292,6 +292,8 @@ class WebApp:
                 
                 # 导出卡片
                 export_formats = data.get('export_formats', self.assistant.config["export"]["default_formats"])
+                if 'json' not in export_formats:
+                    export_formats.insert(0, 'json')
                 export_paths = self.assistant.export_cards(
                     cards, export_formats, 
                     original_content=content,
@@ -439,6 +441,8 @@ class WebApp:
                 
                 # 导出卡片
                 export_formats = data.get('export_formats', self.assistant.config["export"]["default_formats"])
+                if 'json' not in export_formats:
+                    export_formats.insert(0, 'json')
                 export_paths = self.assistant.export_cards(
                     cards, export_formats,
                     original_content=combined_content,
@@ -636,7 +640,10 @@ class WebApp:
             try:
                 data = request.get_json()
                 export_formats = data.get('export_formats', [])
-                
+                # 强制包含 json
+                if 'json' not in export_formats:
+                    export_formats.insert(0, 'json')
+
                 # 更新配置文件中的导出格式
                 self.assistant.config_manager.set('export.default_formats', export_formats)
                 self.assistant.config_manager.save_config()
@@ -1169,6 +1176,8 @@ class WebApp:
                 
                 # 导出卡片
                 export_formats = data.get('export_formats', self.assistant.config["export"]["default_formats"])
+                if 'json' not in export_formats:
+                    export_formats.insert(0, 'json')
                 export_paths = self.assistant.export_cards(cards, export_formats)
                 
                 # 获取摘要

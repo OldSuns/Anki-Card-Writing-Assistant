@@ -512,8 +512,12 @@ class AnkiCardAssistant {
         checkboxes.forEach(checkbox => {
             formats.push(checkbox.value);
         });
-        // 如果没有选择任何格式，则使用配置文件中的默认格式
-        return formats.length > 0 ? formats : (this.defaultExportFormats || ['json', 'apkg']);
+        // 确保始终包含 json
+        if (!formats.includes('json')) {
+            formats.unshift('json');
+        }
+        // 如果没有选择其他格式，仍然返回至少 ['json']
+        return formats.length > 0 ? formats : ['json'];
     }
 
     displayResults(data) {

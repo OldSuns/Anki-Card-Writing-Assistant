@@ -209,6 +209,9 @@ class AnkiCardAssistant:
                     if isinstance(fmt, str) and fmt in ['json', 'csv', 'apkg', 'txt', 'html']:
                         valid_formats.append(fmt)
                 formats = valid_formats if valid_formats else self.config["export"]["default_formats"].copy()
+        # 强制包含 json
+        if 'json' not in formats:
+            formats.insert(0, 'json')
         
         try:
             export_paths = self.exporter.export_multiple_formats(
