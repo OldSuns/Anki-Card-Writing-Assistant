@@ -1,5 +1,7 @@
 # Anki 写卡助手
 
+<img src="https://github.com/user-attachments/assets/8575c2e7-7a34-46ea-ab20-d29689f52d37" alt="Anki_Assistant" width="700">
+
 基于大语言模型的 Anki 卡片生成与导出工具，提供命令行与 Web 双形态使用方式，支持自定义模板、丰富提示词体系与统一导出。
 
 ## 主要特性
