@@ -1433,10 +1433,8 @@ a[href="/"].btn:focus, #home-btn:focus {
     font-weight: 500;
     padding: 0.15rem 0.4rem;
     white-space: nowrap;
-    max-width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
     line-height: 1.2;
+    display: inline-block;
 }
 
 .template-badge.bg-success {
@@ -1478,7 +1476,6 @@ a[href="/"].btn:focus, #home-btn:focus {
     .template-badge {
         font-size: 0.55rem;
         padding: 0.1rem 0.3rem;
-        max-width: 80px;
     }
     
     .history-record-item .d-flex.gap-2 {

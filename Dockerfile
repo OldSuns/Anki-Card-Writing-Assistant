@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 安装系统依赖（如需处理文档类型可在此扩展）
+# 安装系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*

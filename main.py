@@ -14,6 +14,7 @@ from typing import Dict, Any
 # 添加src目录到Python路径
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
+from src import __version__
 from src.core.app_initializer import AppInitializer, ComponentManager
 from src.core.business_services import ExportService, PromptService, CardGenerationService
 
@@ -156,11 +157,12 @@ class WebAppLauncher:
     @staticmethod
     def parse_arguments():
         """解析命令行参数"""
-        parser = argparse.ArgumentParser(description="Anki写卡助手 - Web界面")
+        parser = argparse.ArgumentParser(description=f"Anki写卡助手 v{__version__} - Web界面")
         parser.add_argument("--debug", action="store_true",
                           help="启用Flask调试与自动重载")
         parser.add_argument("--host", default="0.0.0.0", help="Web服务器主机地址")
         parser.add_argument("--port", type=int, default=5000, help="Web服务器端口")
+        parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
         return parser.parse_args()
     
     @staticmethod
