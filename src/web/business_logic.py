@@ -170,6 +170,56 @@ class CardMergeProcessor:
                     merged_cards.append(merged_card)
         
         return merged_cards
+
+    @staticmethod
+    def analyze_template_conflicts(card_sources: List[Dict]) -> Dict[str, Any]:
+        """分析卡片模板冲突"""
+        template_usage = {}
+        source_templates = {}
+        
+        for source in card_sources:
+            source_name = source.get('source_name', '未知来源')
+            cards_data = source.get('cards', [])
+            source_templates[source_name] = set()
+            
+            for card in cards_data:
+                if isinstance(card, dict):
+                    # 获取模板名称
+                    template = card.get('model', card.get('modelName', 'Basic'))
+                    if template not in template_usage:
+                        template_usage[template] = {'count': 0, 'sources': set()}
+                    
+                    template_usage[template]['count'] += 1
+                    template_usage[template]['sources'].add(source_name)
+                    source_templates[source_name].add(template)
+        
+        # 检查是否有冲突
+        has_conflict = len(template_usage) > 1
+        
+        # 找出主要模板（使用最多的）
+        primary_template = None
+        if template_usage:
+            primary_template = max(template_usage.keys(), key=lambda x: template_usage[x]['count'])
+        
+        # 将set转换为list以便JSON序列化
+        serializable_template_usage = {}
+        for template, info in template_usage.items():
+            serializable_template_usage[template] = {
+                'count': info['count'],
+                'sources': list(info['sources'])
+            }
+        
+        serializable_source_templates = {}
+        for source, templates in source_templates.items():
+            serializable_source_templates[source] = list(templates)
+        
+        return {
+            'has_conflict': has_conflict,
+            'template_usage': serializable_template_usage,
+            'source_templates': serializable_source_templates,
+            'primary_template': primary_template,
+            'total_templates': len(template_usage)
+        }
     
     @staticmethod
     def get_merge_preview(card_sources: List[Dict]) -> Dict[str, Any]:
@@ -311,8 +361,14 @@ class BusinessLogicHandler:
         }
 
     def process_card_merge(self, card_sources: List[Dict], merged_deck_name: str, 
-                          export_formats: List[str], template_name: str = None) -> Dict[str, Any]:
+                          export_formats: List[str]) -> Dict[str, Any]:
         """处理卡片合并的完整流程"""
+        # 分析模板冲突
+        template_analysis = self.card_merge_processor.analyze_template_conflicts(card_sources)
+        
+        # 使用主要模板（使用最多的模板）
+        template_name = template_analysis['primary_template']
+        
         # 合并卡片数据，传递模板名称以更新卡片的模型
         merged_cards_data = self.card_merge_processor.merge_card_data(
             card_sources, merged_deck_name, template_name
@@ -383,7 +439,8 @@ class BusinessLogicHandler:
                 'total_sources': len(card_sources),
                 'total_cards': len(merged_cards_data),
                 'merged_deck_name': merged_deck_name
-            }
+            },
+            'template_analysis': template_analysis
         }
 
     def handle_llm_test_error(self, error: Exception) -> str:

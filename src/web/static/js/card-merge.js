@@ -7,7 +7,7 @@ class CardMergeApp {
         this.mergeList = [];
         this.selectedHistoryRecords = [];
         this.uploadedFiles = [];
-        this.selectedTemplate = '';
+        this.templateAnalysis = null;
         
         this.init();
     }
@@ -15,7 +15,6 @@ class CardMergeApp {
     init() {
         this.bindEvents();
         this.initializeUI();
-        this.loadTemplates();
     }
 
     bindEvents() {
@@ -26,11 +25,7 @@ class CardMergeApp {
             });
         });
 
-        // 模板选择
-        document.getElementById('template-select').addEventListener('change', (e) => {
-            this.selectedTemplate = e.target.value;
-            this.updateMergeButtonState();
-        });
+        // 模板分析区域将在添加卡片来源时自动更新
 
         // 加载历史记录
         document.getElementById('load-history-btn').addEventListener('click', () => {
@@ -78,31 +73,76 @@ class CardMergeApp {
         this.updateMergeButtonState();
     }
 
-    async loadTemplates() {
+    async analyzeTemplates() {
+        if (this.mergeList.length === 0) {
+            this.hideTemplateAnalysis();
+            return;
+        }
+
         try {
-            const response = await fetch('/api/templates');
+            const response = await fetch('/api/merge/analyze-templates', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    card_sources: this.mergeList
+                })
+            });
+
             const result = await response.json();
-            
+
             if (result.success) {
-                this.populateTemplateSelect(result.data);
+                this.templateAnalysis = result.data;
+                this.showTemplateAnalysis(result.data);
             } else {
-                this.showError('加载模板失败: ' + result.error);
+                this.showError('分析模板失败: ' + result.message);
             }
         } catch (error) {
-            this.showError('加载模板失败: ' + error.message);
+            this.showError('分析模板失败: ' + error.message);
         }
     }
 
-    populateTemplateSelect(templates) {
-        const select = document.getElementById('template-select');
-        select.innerHTML = '<option value="">请选择模板</option>';
+    showTemplateAnalysis(analysis) {
+        const area = document.getElementById('template-analysis-area');
+        const content = document.getElementById('template-analysis-content');
         
-        templates.forEach(template => {
-            const option = document.createElement('option');
-            option.value = template;
-            option.textContent = template;
-            select.appendChild(option);
-        });
+        let html = '';
+        
+        if (analysis.has_conflict) {
+            // 有冲突的情况
+            html = `
+                <div class="alert alert-warning">
+                    <h6><i class="fas fa-exclamation-triangle me-2"></i>检测到模板冲突</h6>
+                    <p class="mb-2">发现 ${analysis.total_templates} 种不同的模板，将使用主要模板：<strong>${analysis.primary_template}</strong></p>
+                    <div class="small">
+                        <strong>模板使用情况：</strong>
+                        <ul class="mb-0 mt-1">
+                            ${Object.entries(analysis.template_usage).map(([template, info]) => 
+                                `<li>${template}: ${info.count} 张卡片 (来源: ${Array.from(info.sources).join(', ')})</li>`
+                            ).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+        } else {
+            // 无冲突的情况
+            html = `
+                <div class="alert alert-success">
+                    <h6><i class="fas fa-check-circle me-2"></i>模板一致</h6>
+                    <p class="mb-0">所有卡片使用相同模板：<strong>${analysis.primary_template}</strong></p>
+                </div>
+            `;
+        }
+        
+        content.innerHTML = html;
+        area.style.display = 'block';
+    }
+
+    hideTemplateAnalysis() {
+        const area = document.getElementById('template-analysis-area');
+        area.style.display = 'none';
+        this.templateAnalysis = null;
     }
 
     switchSourceMethod(method) {
@@ -148,31 +188,108 @@ class CardMergeApp {
         }
     }
 
-    renderHistoryList(records) {
+    // 检测卡片模板信息
+    detectTemplate(cards) {
+        if (!cards || cards.length === 0) {
+            return { template: '未知模板', confidence: 'unknown' };
+        }
+        
+        // 统计不同模板的使用情况
+        const templateCounts = {};
+        
+        cards.forEach(card => {
+            let template = '未知模板';
+            
+            // 检查是否有明确的模板字段
+            if (card.modelName) {
+                template = card.modelName;
+            } else if (card.template) {
+                template = card.template;
+            } else if (card.fields) {
+                // 根据字段推断模板类型
+                const fieldNames = Object.keys(card.fields);
+                if (fieldNames.includes('Text') && fieldNames.includes('Extra')) {
+                    template = 'Cloze';
+                } else if (fieldNames.includes('Front') && fieldNames.includes('Back')) {
+                    template = 'Basic';
+                } else if (fieldNames.includes('Question') && fieldNames.includes('Answer')) {
+                    template = 'Basic (Question-Answer)';
+                } else if (fieldNames.length >= 2) {
+                    template = `自定义模板 (${fieldNames.length}字段)`;
+                }
+            }
+            
+            templateCounts[template] = (templateCounts[template] || 0) + 1;
+        });
+        
+        // 找出最常用的模板
+        const sortedTemplates = Object.entries(templateCounts)
+            .sort((a, b) => b[1] - a[1]);
+        
+        if (sortedTemplates.length === 0) {
+            return { template: '未知模板', confidence: 'unknown' };
+        }
+        
+        const [primaryTemplate, primaryCount] = sortedTemplates[0];
+        const totalCards = cards.length;
+        const confidence = primaryCount === totalCards ? 'uniform' : 'mixed';
+        
+        return {
+            template: primaryTemplate,
+            confidence,
+            usage: templateCounts,
+            totalCards
+        };
+    }
+
+    async renderHistoryList(records) {
         const historyList = document.getElementById('history-list');
         
         if (records.length === 0) {
             historyList.innerHTML = `
-                <div class="text-center text-muted py-3">
-                    <i class="fas fa-inbox fa-2x mb-2"></i>
-                    <p class="mb-0">暂无历史记录</p>
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-clock-rotate-left fa-3x mb-3 text-secondary"></i>
+                    <h6 class="text-muted">暂无历史记录</h6>
+                    <p class="small mb-0">您还没有生成过任何卡片</p>
                 </div>
             `;
             return;
         }
 
+        // 先渲染基础结构，后续异步加载模板信息
         const html = records.map(record => `
-            <div class="form-check border rounded p-2 mb-2">
-                <input class="form-check-input" type="checkbox" value="${record.id}" id="history-${record.id}">
-                <label class="form-check-label w-100" for="history-${record.id}">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <h6 class="mb-1">${record.deck_name}</h6>
-                            <p class="mb-1 text-muted small">${record.content_preview}</p>
-                            <small class="text-muted">
-                                <i class="fas fa-calendar me-1"></i>${record.timestamp_display}
-                                <i class="fas fa-cards-blank ms-2 me-1"></i>${record.card_count} 张卡片
-                            </small>
+            <div class="history-record-item mb-1" data-record-id="${record.id}">
+                <label class="history-record-label" for="history-${record.id}">
+                    <div class="d-flex justify-content-between align-items-center py-2 px-3 border rounded position-relative">
+                        <input class="form-check-input position-absolute" type="checkbox" value="${record.id}" id="history-${record.id}" style="top: 0.75rem; left: 0.75rem; margin: 0;">
+                        <div class="flex-grow-1" style="margin-left: 1.5rem;">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <div class="d-flex align-items-center">
+                                    <i class="fas fa-layer-group text-primary me-2" style="font-size: 0.8rem;"></i>
+                                    <h6 class="mb-0 text-dark fw-semibold" style="font-size: 0.85rem;">${record.deck_name}</h6>
+                                </div>
+                                <div class="selection-indicator">
+                                    <i class="fas fa-check-circle text-success d-none" style="font-size: 0.9rem;"></i>
+                                    <i class="far fa-circle text-muted" style="font-size: 0.9rem;"></i>
+                                </div>
+                            </div>
+                            <p class="card-text text-muted mb-1 lh-sm" style="max-height: 1.5em; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; font-size: 0.7rem;">
+                                ${record.content_preview}
+                            </p>
+                            <div class="d-flex align-items-center gap-2 text-muted" style="font-size: 0.65rem;">
+                                <span class="d-flex align-items-center">
+                                    <i class="fas fa-calendar-alt me-1 text-info"></i>
+                                    ${record.timestamp_display}
+                                </span>
+                                <span class="d-flex align-items-center">
+                                    <i class="fas fa-cards-blank me-1 text-success"></i>
+                                    ${record.card_count}张卡片
+                                </span>
+                                <span class="d-flex align-items-center template-loading" data-record-id="${record.id}">
+                                    <i class="fas fa-spinner fa-pulse me-1 text-muted"></i>
+                                    <small class="text-muted">检测中...</small>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </label>
@@ -181,12 +298,107 @@ class CardMergeApp {
 
         historyList.innerHTML = html;
 
-        // 绑定选择事件
+        // 绑定选择事件并添加动画效果
+        this.bindHistorySelectionEvents(historyList);
+        
+        // 异步加载模板信息
+        this.loadTemplateInfoForHistoryRecords(records);
+    }
+
+    bindHistorySelectionEvents(historyList) {
         historyList.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-            checkbox.addEventListener('change', () => {
+            checkbox.addEventListener('change', (e) => {
+                const recordItem = e.target.closest('.history-record-item');
+                const container = recordItem.querySelector('.d-flex.border');
+                const selectionIndicator = recordItem.querySelector('.selection-indicator');
+                
+                if (e.target.checked) {
+                    // 选中状态
+                    container.classList.add('border-primary');
+                    container.style.background = 'rgba(74, 144, 226, 0.02)';
+                    selectionIndicator.querySelector('.fas').classList.remove('d-none');
+                    selectionIndicator.querySelector('.far').classList.add('d-none');
+                    
+                    // 添加选中动画
+                    recordItem.style.transform = 'scale(1.01)';
+                    setTimeout(() => {
+                        recordItem.style.transform = 'scale(1)';
+                    }, 150);
+                } else {
+                    // 未选中状态
+                    container.classList.remove('border-primary');
+                    container.style.background = '';
+                    selectionIndicator.querySelector('.fas').classList.add('d-none');
+                    selectionIndicator.querySelector('.far').classList.remove('d-none');
+                }
+                
                 this.updateSelectedHistory();
             });
+            
+            // 添加悬停效果到整个label区域
+            const recordItem = checkbox.closest('.history-record-item');
+            const container = recordItem.querySelector('.d-flex.border');
+            const label = recordItem.querySelector('.history-record-label');
+            
+            label.addEventListener('mouseenter', () => {
+                if (!checkbox.checked) {
+                    container.style.transform = 'translateY(-1px)';
+                    container.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.1)';
+                    container.style.borderColor = 'var(--primary-color)';
+                }
+            });
+            
+            label.addEventListener('mouseleave', () => {
+                if (!checkbox.checked) {
+                    container.style.transform = 'translateY(0)';
+                    container.style.boxShadow = '';
+                    container.style.borderColor = '';
+                }
+            });
         });
+    }
+
+    async loadTemplateInfoForHistoryRecords(records) {
+        // 为每个记录异步加载模板信息
+        for (const record of records) {
+            try {
+                const response = await fetch(`/api/history/${record.id}/detail`);
+                const result = await response.json();
+                
+                if (result.success && result.data.cards) {
+                    const templateInfo = this.detectTemplate(result.data.cards);
+                    this.updateHistoryTemplateDisplay(record.id, templateInfo);
+                } else {
+                    this.updateHistoryTemplateDisplay(record.id, null);
+                }
+            } catch (error) {
+                console.error(`加载记录 ${record.id} 的模板信息失败:`, error);
+                this.updateHistoryTemplateDisplay(record.id, null);
+            }
+        }
+    }
+
+    updateHistoryTemplateDisplay(recordId, templateInfo) {
+        const loadingElement = document.querySelector(`[data-record-id="${recordId}"].template-loading`);
+        if (!loadingElement) return;
+        
+        if (templateInfo) {
+            loadingElement.innerHTML = `
+                <i class="fas fa-puzzle-piece me-1 text-warning"></i>
+                <span class="template-badge badge ${templateInfo.confidence === 'uniform' ? 'bg-success' : 'bg-warning text-dark'} rounded-pill" 
+                      title="${templateInfo.confidence === 'mixed' ? '混合模板' : '统一模板'}"
+                      style="font-size: 0.6rem; padding: 0.15rem 0.4rem;">
+                    ${templateInfo.template}
+                </span>
+            `;
+            loadingElement.classList.remove('template-loading');
+        } else {
+            loadingElement.innerHTML = `
+                <i class="fas fa-question-circle me-1 text-muted"></i>
+                <small class="text-muted" style="font-size: 0.6rem;">未知</small>
+            `;
+            loadingElement.classList.remove('template-loading');
+        }
     }
 
     updateSelectedHistory() {
@@ -206,7 +418,29 @@ class CardMergeApp {
         const allChecked = Array.from(checkboxes).every(cb => cb.checked);
         
         checkboxes.forEach(cb => {
+            const wasChecked = cb.checked;
             cb.checked = !allChecked;
+            
+            // 触发样式更新
+            if (cb.checked !== wasChecked) {
+                const recordItem = cb.closest('.history-record-item');
+                const container = recordItem.querySelector('.d-flex.border');
+                const selectionIndicator = recordItem.querySelector('.selection-indicator');
+                
+                if (cb.checked) {
+                    // 选中状态
+                    container.classList.add('border-primary');
+                    container.style.background = 'rgba(74, 144, 226, 0.02)';
+                    selectionIndicator.querySelector('.fas').classList.remove('d-none');
+                    selectionIndicator.querySelector('.far').classList.add('d-none');
+                } else {
+                    // 未选中状态
+                    container.classList.remove('border-primary');
+                    container.style.background = '';
+                    selectionIndicator.querySelector('.fas').classList.add('d-none');
+                    selectionIndicator.querySelector('.far').classList.remove('d-none');
+                }
+            }
         });
         
         this.updateSelectedHistory();
@@ -280,6 +514,9 @@ class CardMergeApp {
                     deck_name: result.data.deck_name
                 });
                 
+                // 显示已上传文件列表
+                this.renderUploadedFilesList();
+                
                 this.showSuccess(`成功解析文件: ${result.data.filename} (${result.data.card_count} 张卡片)`);
             } else {
                 this.showError(`解析文件失败: ${result.message}`);
@@ -287,6 +524,63 @@ class CardMergeApp {
         } catch (error) {
             this.showError(`解析文件失败: ${error.message}`);
         }
+    }
+
+    renderUploadedFilesList() {
+        const container = document.getElementById('uploaded-files-container');
+        const filesList = document.getElementById('uploaded-files-list');
+        
+        if (this.uploadedFiles.length === 0) {
+            container.style.display = 'none';
+            return;
+        }
+        
+        container.style.display = 'block';
+        
+        const html = this.uploadedFiles.map((file, index) => {
+            // 检测模板信息
+            const templateInfo = this.detectTemplate(file.cards);
+            
+            return `
+            <div class="uploaded-file-item d-flex justify-content-between align-items-center py-2 px-2 mb-1 border rounded">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-file-alt text-primary me-2" style="font-size: 0.8rem;"></i>
+                            <h6 class="mb-0 text-dark fw-semibold" style="font-size: 0.85rem;">${file.filename}</h6>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-2" onclick="cardMergeApp.removeUploadedFile(${index})" title="移除文件" style="padding: 0.15rem 0.4rem; font-size: 0.7rem;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 text-muted" style="font-size: 0.65rem;">
+                        <span class="d-flex align-items-center">
+                            <i class="fas fa-layer-group me-1"></i>${file.deck_name}
+                        </span>
+                        <span class="d-flex align-items-center">
+                            <i class="fas fa-cards-blank me-1"></i>${file.card_count}张卡片
+                        </span>
+                        <span class="d-flex align-items-center">
+                            <i class="fas fa-puzzle-piece me-1 text-warning"></i>
+                            <span class="template-badge badge ${templateInfo.confidence === 'uniform' ? 'bg-success' : 'bg-warning text-dark'} rounded-pill" 
+                                  title="${templateInfo.confidence === 'mixed' ? '混合模板' : '统一模板'}" 
+                                  style="font-size: 0.6rem; padding: 0.15rem 0.4rem;">
+                                ${templateInfo.template}
+                            </span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            `;
+        }).join('');
+        
+        filesList.innerHTML = html;
+    }
+
+    removeUploadedFile(index) {
+        this.uploadedFiles.splice(index, 1);
+        this.renderUploadedFilesList();
+        this.updateAddButtonState();
     }
 
     updateAddButtonState() {
@@ -307,25 +601,79 @@ class CardMergeApp {
             this.addUploadedFilesToMergeList();
         }
 
+        // 立即更新UI和重新分析模板
         this.renderMergeList();
         this.updateMergeButtonState();
+        
+        // 确保模板分析在UI更新后进行
+        await this.analyzeTemplates();
+    }
+
+    // 检查是否已存在重复的历史记录
+    isDuplicateHistoryRecord(recordId) {
+        return this.mergeList.some(item => 
+            item.source_type === 'history' && item.id === `history-${recordId}`
+        );
+    }
+
+    // 检查是否已存在重复的上传文件
+    isDuplicateUploadFile(filename) {
+        return this.mergeList.some(item => 
+            item.source_type === 'upload' && item.source_name.includes(filename)
+        );
+    }
+
+    // 显示重复提示信息
+    showDuplicateInfo(duplicateItems, addedCount, totalCount) {
+        if (duplicateItems.length > 0) {
+            const duplicateNames = duplicateItems.map(item => item.name).join('、');
+            const message = `跳过 ${duplicateItems.length} 个重复项目：${duplicateNames}。成功添加 ${addedCount} 个新项目到合并列表。`;
+            this.showSuccess(message);
+        } else if (addedCount > 0) {
+            this.showSuccess(`成功添加 ${addedCount} 个项目到合并列表`);
+        } else {
+            this.showError('所有选中的项目都已存在于合并列表中');
+        }
     }
 
     async addHistoryToMergeList() {
+        const duplicateItems = [];
+        const addedItems = [];
+        const totalCount = this.selectedHistoryRecords.length;
+
         for (const recordId of this.selectedHistoryRecords) {
             try {
+                // 检查是否重复
+                if (this.isDuplicateHistoryRecord(recordId)) {
+                    // 获取记录名称用于提示
+                    const response = await fetch(`/api/history/${recordId}/detail`);
+                    const result = await response.json();
+                    if (result.success) {
+                        duplicateItems.push({
+                            id: recordId,
+                            name: result.data.deck_name
+                        });
+                    }
+                    continue; // 跳过重复项
+                }
+
                 const response = await fetch(`/api/history/${recordId}/detail`);
                 const result = await response.json();
 
                 if (result.success) {
                     const record = result.data;
-                    this.mergeList.push({
+                    const newItem = {
                         id: `history-${recordId}`,
                         source_type: 'history',
                         source_name: `历史记录: ${record.deck_name}`,
                         cards: record.cards,
                         card_count: record.card_count,
                         original_deck_name: record.deck_name
+                    };
+                    this.mergeList.push(newItem);
+                    addedItems.push({
+                        id: recordId,
+                        name: record.deck_name
                     });
                 }
             } catch (error) {
@@ -333,49 +681,105 @@ class CardMergeApp {
             }
         }
 
-        // 清除选择
+        // 显示添加结果提示
+        this.showDuplicateInfo(duplicateItems, addedItems.length, totalCount);
+
+        // 清除选择并重置样式
         this.selectedHistoryRecords = [];
         document.querySelectorAll('#history-list input[type="checkbox"]').forEach(cb => {
+            const wasChecked = cb.checked;
             cb.checked = false;
+            
+            // 重置选择样式
+            if (wasChecked) {
+                const recordItem = cb.closest('.history-record-item');
+                if (recordItem) {
+                    const container = recordItem.querySelector('.d-flex.border');
+                    const selectionIndicator = recordItem.querySelector('.selection-indicator');
+                    
+                    if (container) {
+                        container.classList.remove('border-primary');
+                        container.style.background = '';
+                    }
+                    if (selectionIndicator) {
+                        selectionIndicator.querySelector('.fas')?.classList.add('d-none');
+                        selectionIndicator.querySelector('.far')?.classList.remove('d-none');
+                    }
+                }
+            }
         });
         document.getElementById('add-source-btn').disabled = true;
     }
 
     addUploadedFilesToMergeList() {
+        const duplicateItems = [];
+        const addedItems = [];
+        const totalCount = this.uploadedFiles.length;
+
         this.uploadedFiles.forEach(file => {
-            this.mergeList.push({
+            // 检查是否重复
+            if (this.isDuplicateUploadFile(file.filename)) {
+                duplicateItems.push({
+                    name: file.filename
+                });
+                return; // 跳过重复项
+            }
+
+            const newItem = {
                 id: `upload-${Date.now()}-${Math.random()}`,
                 source_type: 'upload',
                 source_name: `上传文件: ${file.filename}`,
                 cards: file.cards,
                 card_count: file.card_count,
                 original_deck_name: file.deck_name
+            };
+            this.mergeList.push(newItem);
+            addedItems.push({
+                name: file.filename
             });
         });
 
+        // 显示添加结果提示
+        this.showDuplicateInfo(duplicateItems, addedItems.length, totalCount);
+
         // 清除上传文件
         this.uploadedFiles = [];
+        this.renderUploadedFilesList(); // 更新已上传文件列表显示
         document.getElementById('merge-file-upload-input').value = '';
         document.getElementById('add-source-btn').disabled = true;
     }
 
     renderMergeList() {
-        const mergeList = document.getElementById('merge-list');
+        const mergeListContainer = document.getElementById('merge-list');
         const countBadge = document.getElementById('merge-list-count');
         const clearBtn = document.getElementById('clear-merge-list-btn');
         const emptyState = document.getElementById('merge-list-empty');
 
+        // 更新计数
         countBadge.textContent = `${this.mergeList.length} 个来源`;
         clearBtn.disabled = this.mergeList.length === 0;
 
         if (this.mergeList.length === 0) {
+            // 显示空状态，隐藏列表项
             emptyState.style.display = 'block';
-            mergeList.innerHTML = '';
+            
+            // 清空列表容器中除了空状态之外的内容
+            const listItems = mergeListContainer.querySelectorAll('.list-group-item');
+            listItems.forEach(item => item.remove());
+            
+            this.hideTemplateAnalysis();
+            
+            // 隐藏合并预览卡片
+            const previewCard = document.getElementById('merge-preview-card');
+            previewCard.classList.add('d-none');
+            
             return;
         }
 
+        // 隐藏空状态
         emptyState.style.display = 'none';
 
+        // 生成列表项HTML
         const html = this.mergeList.map((source, index) => `
             <div class="list-group-item">
                 <div class="d-flex justify-content-between align-items-start">
@@ -383,7 +787,7 @@ class CardMergeApp {
                         <h6 class="mb-1">${source.source_name}</h6>
                         <p class="mb-1 text-muted small">原牌组: ${source.original_deck_name}</p>
                         <small class="text-muted">
-                            <i class="fas fa-cards-blank me-1"></i>${source.card_count} 张卡片
+                            <i class="fas fa-cards-blank me-1"></i>${source.card_count}张卡片
                             <i class="fas fa-tag ms-2 me-1"></i>${source.source_type === 'history' ? '历史记录' : '上传文件'}
                         </small>
                     </div>
@@ -394,7 +798,12 @@ class CardMergeApp {
             </div>
         `).join('');
 
-        mergeList.innerHTML = html;
+        // 先清空现有的列表项，保留空状态元素
+        const listItems = mergeListContainer.querySelectorAll('.list-group-item');
+        listItems.forEach(item => item.remove());
+        
+        // 插入新的列表项到空状态元素前面
+        emptyState.insertAdjacentHTML('beforebegin', html);
 
         // 显示合并预览
         this.showMergePreview();
@@ -404,12 +813,71 @@ class CardMergeApp {
         this.mergeList.splice(index, 1);
         this.renderMergeList();
         this.updateMergeButtonState();
+        
+        // 重新分析模板
+        if (this.mergeList.length > 0) {
+            this.analyzeTemplates();
+        }
     }
 
     clearMergeList() {
+        // 清空所有相关状态
         this.mergeList = [];
+        this.selectedHistoryRecords = [];
+        this.uploadedFiles = [];
+        this.templateAnalysis = null;
+        
+        // 清空历史记录选择 - 使用正确的选择器并重置样式
+        document.querySelectorAll('#history-list input[type="checkbox"]:checked').forEach(checkbox => {
+            checkbox.checked = false;
+            
+            // 重置选择样式
+            const recordItem = checkbox.closest('.history-record-item');
+            if (recordItem) {
+                const container = recordItem.querySelector('.d-flex.border');
+                const selectionIndicator = recordItem.querySelector('.selection-indicator');
+                
+                if (container) {
+                    container.classList.remove('border-primary');
+                    container.style.background = '';
+                }
+                if (selectionIndicator) {
+                    selectionIndicator.querySelector('.fas')?.classList.add('d-none');
+                    selectionIndicator.querySelector('.far')?.classList.remove('d-none');
+                }
+            }
+        });
+        
+        // 清空文件上传区域 - 使用正确的ID
+        const fileInput = document.getElementById('merge-file-upload-input');
+        if (fileInput) {
+            fileInput.value = '';
+        }
+        
+        // 清空已上传文件列表显示
+        this.renderUploadedFilesList();
+        
+        // 隐藏模板分析区域
+        this.hideTemplateAnalysis();
+        
+        // 隐藏合并结果区域
+        const resultCard = document.getElementById('merge-result-card');
+        if (resultCard) {
+            resultCard.classList.add('d-none');
+        }
+        
+        // 更新UI
         this.renderMergeList();
         this.updateMergeButtonState();
+        
+        // 更新添加按钮状态
+        const currentMethod = document.querySelector('input[name="source-method"]:checked')?.value || 'history';
+        const addBtn = document.getElementById('add-source-btn');
+        if (currentMethod === 'history') {
+            addBtn.disabled = this.selectedHistoryRecords.length === 0;
+        } else {
+            addBtn.disabled = this.uploadedFiles.length === 0;
+        }
     }
 
     showMergePreview() {
@@ -460,15 +928,10 @@ class CardMergeApp {
         const deckName = document.getElementById('merged-deck-name').value.trim();
         const selectedFormats = document.querySelectorAll('.export-format-checkbox:checked');
 
-        mergeBtn.disabled = this.mergeList.length === 0 || !deckName || selectedFormats.length === 0 || !this.selectedTemplate;
+        mergeBtn.disabled = this.mergeList.length === 0 || !deckName || selectedFormats.length === 0;
     }
 
     async startMerge() {
-        if (!this.selectedTemplate) {
-            this.showError('请选择卡片模板');
-            return;
-        }
-
         const mergeBtn = document.getElementById('merge-cards-btn');
         const deckName = document.getElementById('merged-deck-name').value.trim();
         const selectedFormats = Array.from(document.querySelectorAll('.export-format-checkbox:checked'))
@@ -490,8 +953,7 @@ class CardMergeApp {
                 body: JSON.stringify({
                     card_sources: this.mergeList,
                     merged_deck_name: deckName,
-                    export_formats: selectedFormats,
-                    template: this.selectedTemplate
+                    export_formats: selectedFormats
                 })
             });
 
@@ -520,22 +982,28 @@ class CardMergeApp {
 
         // 显示摘要
         const summaryHtml = `
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="text-center">
                     <h4 class="text-success mb-1">${data.merge_info.total_cards}</h4>
                     <small class="text-muted">合并卡片数</small>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="text-center">
                     <h4 class="text-primary mb-1">${data.merge_info.total_sources}</h4>
                     <small class="text-muted">来源数量</small>
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <div class="text-center">
                     <h4 class="text-info mb-1">${data.merge_info.merged_deck_name}</h4>
                     <small class="text-muted">牌组名称</small>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-center">
+                    <h4 class="text-warning mb-1">${data.template_analysis?.primary_template || '未知'}</h4>
+                    <small class="text-muted">使用模板</small>
                 </div>
             </div>
         `;

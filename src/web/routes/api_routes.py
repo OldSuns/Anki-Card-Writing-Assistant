@@ -203,7 +203,25 @@ class APIRoutes:
                 return ResponseUtils.error_response('请提供要合并的卡片来源', 400)
             
             preview_info = self.business_logic.card_merge_processor.get_merge_preview(card_sources)
-            return ResponseUtils.success_response(data=preview_info)
+            template_analysis = self.business_logic.card_merge_processor.analyze_template_conflicts(card_sources)
+            
+            return ResponseUtils.success_response(data={
+                'preview': preview_info,
+                'template_analysis': template_analysis
+            })
+
+        @self.app.route('/api/merge/analyze-templates', methods=['POST'])
+        @handle_validation_error
+        def analyze_templates():
+            """分析模板冲突"""
+            data = request.get_json()
+            card_sources = data.get('card_sources', [])
+            
+            if not card_sources:
+                return ResponseUtils.error_response('请提供要合并的卡片来源', 400)
+            
+            template_analysis = self.business_logic.card_merge_processor.analyze_template_conflicts(card_sources)
+            return ResponseUtils.success_response(data=template_analysis)
 
         @self.app.route('/api/merge', methods=['POST'])
         @handle_validation_error
@@ -213,7 +231,6 @@ class APIRoutes:
             card_sources = data.get('card_sources', [])
             merged_deck_name = data.get('merged_deck_name', '合并卡组')
             export_formats = data.get('export_formats', ['json', 'apkg'])
-            template_name = data.get('template', '')
             
             if not card_sources:
                 return ResponseUtils.error_response('请提供要合并的卡片来源', 400)
@@ -221,20 +238,9 @@ class APIRoutes:
             if ValidationUtils.is_empty_content(merged_deck_name):
                 return ResponseUtils.error_response('请提供合并后的牌组名称', 400)
             
-            if not template_name:
-                return ResponseUtils.error_response('请选择卡片模板', 400)
-            
-            # 验证模板是否存在
-            from src.templates.template_manager import TemplateManager
-            template_manager = TemplateManager()
-            available_templates = template_manager.list_templates()
-            
-            if template_name not in available_templates:
-                return ResponseUtils.error_response(f'模板 "{template_name}" 不存在', 400)
-            
             try:
                 result = self.business_logic.process_card_merge(
-                    card_sources, merged_deck_name, export_formats, template_name
+                    card_sources, merged_deck_name, export_formats
                 )
                 return ResponseUtils.success_response(data=result)
             except Exception as e:
