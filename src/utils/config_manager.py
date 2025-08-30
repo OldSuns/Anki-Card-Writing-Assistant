@@ -1,197 +1,147 @@
+"""
+配置管理器模块
+负责管理应用配置的加载、保存和访问
+"""
+
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
-import os
+from typing import Any, Dict
+
 
 class ConfigManager:
     """配置管理器"""
-    
-    def __init__(self, config_path: Optional[str] = None):
-        # 优先使用项目根目录的config.json，除非明确指定其他路径
-        if config_path is None:
-            self.config_path = Path("config.json")
-        else:
-            self.config_path = Path(config_path)
-        
-        self.config: Dict[str, Any] = {}
+
+    def __init__(self, config_file: str = "config.json"):
+        self.config_file = Path(config_file)
         self.logger = logging.getLogger(__name__)
+        self._config = {}
         self._load_config()
-    
+
     def _load_config(self):
         """加载配置文件"""
         try:
-            if self.config_path.exists():
-                with open(self.config_path, 'r', encoding='utf-8') as f:
-                    self.config = json.load(f)
-                self.logger.info(f"已加载配置文件: {self.config_path}")
+            if self.config_file.exists():
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    self._config = json.load(f)
+                self.logger.info("配置已从 %s 加载", self.config_file)
             else:
-                self.logger.warning(f"配置文件不存在: {self.config_path}")
+                self.logger.warning("配置文件 %s 不存在，使用默认配置", self.config_file)
                 self._create_default_config()
         except Exception as e:
-            self.logger.error(f"加载配置文件失败: {e}")
+            self.logger.error("加载配置文件失败: %s", e)
             self._create_default_config()
-    
+
     def _create_default_config(self):
-        """创建默认配置文件 - 从config.json.example复制模板"""
-        try:
-            # 尝试从config.json.example读取配置模板
-            template_config_path = Path("config.json.example")
-            if template_config_path.exists():
-                with open(template_config_path, 'r', encoding='utf-8') as f:
-                    template_config = json.load(f)
-                
-                # 创建config.json文件
-                config_json_path = Path("config.json")
-                with open(config_json_path, 'w', encoding='utf-8') as f:
-                    json.dump(template_config, f, ensure_ascii=False, indent=2)
-                
-                # 加载到内存
-                self.config = template_config
-                self.logger.info("已从config.json.example创建并加载默认配置到config.json")
-                return
-        except Exception as e:
-            self.logger.warning(f"从config.json.example创建配置失败: {e}")
-        
-        # 如果无法从config.json.example读取，创建最基础的配置
-        self.config = {
+        """创建默认配置"""
+        self._config = {
             "llm": {
                 "api_key": "",
-                "base_url": "https://api.openai.com/v1",
                 "model": "gpt-3.5-turbo",
+                "base_url": "https://api.openai.com/v1",
                 "temperature": 0.7,
                 "max_tokens": 20000,
-                "timeout": 30
+                "timeout": 60
             },
             "generation": {
-                "default_difficulty": "medium",
-                "default_card_count": 1
+                "default_template": "Quizify",
+                "default_prompt_type": "multiple_choice",
+                "default_card_count": 5,
+                "default_difficulty": "medium"
             },
             "export": {
-                "default_formats": ["json", "apkg"],
-                "output_directory": "output"
+                "output_directory": "output",
+                "default_formats": ["json", "apkg"]
             },
             "templates": {
-                "directory": "Card Template"
+                "directory": "src/templates"
             }
         }
-        
-        # 同时创建config.json文件
-        try:
-            with open("config.json", 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=2)
-            self.logger.info("已创建基础配置文件config.json")
-        except Exception as e:
-            self.logger.error(f"创建config.json文件失败: {e}")
-    
+        self.save_config()
+
     def get_config(self) -> Dict[str, Any]:
-        """获取配置"""
-        return self.config
-    
+        """获取完整配置"""
+        return self._config.copy()
+
     def get(self, key: str, default: Any = None) -> Any:
-        """获取配置项"""
-        keys = key.split('.')
-        value = self.config
-        
-        for k in keys:
-            if isinstance(value, dict) and k in value:
+        """获取配置值（支持点号分隔的嵌套键）"""
+        try:
+            keys = key.split('.')
+            value = self._config
+            for k in keys:
                 value = value[k]
-            else:
-                return default
-        
-        return value
-    
+            return value
+        except (KeyError, TypeError):
+            return default
+
     def set(self, key: str, value: Any):
-        """设置配置项"""
-        keys = key.split('.')
-        config = self.config
-        
-        # 创建嵌套字典结构
-        for k in keys[:-1]:
-            if k not in config:
-                config[k] = {}
-            config = config[k]
-        
-        config[keys[-1]] = value
-        self.logger.info(f"已设置配置项: {key} = {value}")
-    
-    def save_config(self, path: Optional[str] = None):
+        """设置配置值（支持点号分隔的嵌套键）"""
+        try:
+            keys = key.split('.')
+            config = self._config
+            for k in keys[:-1]:
+                if k not in config:
+                    config[k] = {}
+                config = config[k]
+            config[keys[-1]] = value
+        except Exception as e:
+            self.logger.error("设置配置值失败: %s", e)
+
+    def save_config(self):
         """保存配置到文件"""
-        save_path = Path(path) if path else self.config_path
-        
         try:
-            save_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(save_path, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=2)
-            self.logger.info(f"配置已保存到: {save_path}")
+            # 确保输出目录存在
+            self.config_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(self._config, f, indent=2, ensure_ascii=False)
+            self.logger.info("配置已保存到 %s", self.config_file)
         except Exception as e:
-            self.logger.error(f"保存配置失败: {e}")
-            raise
-    
-    def reload_config(self):
-        """重新加载配置"""
-        self._load_config()
-    
+            self.logger.error("保存配置文件失败: %s", e)
+
+    def update_config(self, new_config: Dict[str, Any]):
+        """更新配置"""
+        try:
+            self._config.update(new_config)
+            self.save_config()
+            self.logger.info("配置已更新")
+        except Exception as e:
+            self.logger.error("更新配置失败: %s", e)
+
+    def reset_config(self):
+        """重置为默认配置"""
+        try:
+            self._create_default_config()
+            self.logger.info("配置已重置为默认值")
+        except Exception as e:
+            self.logger.error("重置配置失败: %s", e)
+
+    def get_llm_config(self) -> Dict[str, Any]:
+        """获取LLM配置"""
+        return self._config.get("llm", {})
+
+    def get_generation_config(self) -> Dict[str, Any]:
+        """获取生成配置"""
+        return self._config.get("generation", {})
+
+    def get_export_config(self) -> Dict[str, Any]:
+        """获取导出配置"""
+        return self._config.get("export", {})
+
     def validate_config(self) -> bool:
-        """验证配置"""
-        required_keys = [
-            "llm.api_key",
-            "llm.model"
-        ]
-        
-        for key in required_keys:
-            if self.get(key) is None:
-                self.logger.error(f"缺少必需的配置项: {key}")
-                return False
-        
-        return True
-    
-    def get_api_keys(self) -> Dict[str, Any]:
-        """获取API密钥配置"""
-        api_keys_path = Path("config/api_keys.json")
-        if api_keys_path.exists():
-            try:
-                with open(api_keys_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception as e:
-                self.logger.error(f"加载API密钥配置失败: {e}")
-        
-        return {}
-    
-    def save_api_keys(self, api_keys: Dict[str, Any]):
-        """保存API密钥配置"""
-        api_keys_path = Path("config/api_keys.json")
+        """验证配置有效性"""
         try:
-            api_keys_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(api_keys_path, 'w', encoding='utf-8') as f:
-                json.dump(api_keys, f, ensure_ascii=False, indent=2)
-            self.logger.info("API密钥配置已保存")
+            required_keys = [
+                "llm.api_key",
+                "llm.model",
+                "llm.base_url",
+                "generation.default_template",
+                "export.output_directory"
+            ]
+            for key in required_keys:
+                if not self.get(key):
+                    self.logger.warning("缺少必需的配置项: %s", key)
+                    return False
+            return True
         except Exception as e:
-            self.logger.error(f"保存API密钥配置失败: {e}")
-            raise
-    
-    @staticmethod
-    def get_user_config_dir() -> Path:
-        """获取用户配置目录（静态方法，不触发配置文件加载）"""
-        if os.name == 'nt':  # Windows
-            config_dir = Path.home() / "AppData" / "Local" / "AnkiCardAssistant"
-        elif os.name == 'posix':  # macOS/Linux
-            config_dir = Path.home() / ".config" / "ankicardassistant"
-        else:
-            config_dir = Path.home() / ".ankicardassistant"
-        
-        config_dir.mkdir(parents=True, exist_ok=True)
-        return config_dir
-    
-    @staticmethod
-    def get_user_data_dir() -> Path:
-        """获取用户数据目录（静态方法，不触发配置文件加载）"""
-        if os.name == 'nt':  # Windows
-            data_dir = Path.home() / "AppData" / "Local" / "AnkiCardAssistant" / "data"
-        elif os.name == 'posix':  # macOS/Linux
-            data_dir = Path.home() / ".local" / "share" / "ankicardassistant"
-        else:
-            data_dir = Path.home() / ".ankicardassistant" / "data"
-        
-        data_dir.mkdir(parents=True, exist_ok=True)
-        return data_dir
+            self.logger.error("验证配置失败: %s", e)
+            return False

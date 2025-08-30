@@ -3,20 +3,349 @@
 <span style="display:none">{{cloze:Content}}</span>
 
 <script>
-    $(function () {
-        /*
-        // Show all sections by default on back side
-        $('#note').show(0)
-        $('#info').show(0)
-        $('#mnemonics').show(0)
-        $('#extra').show(0)
+    // 复制正面模板的完整JavaScript代码到背面
+    var scrollToClozeOnToggle = true
+    var animateScroll = true
+    var showHintsForPseudoClozes = true
+    var underlineRevealedPseudoClozes = false
+    var underlineRevealedGenuineClozes = true
+    var revealPseudoClozesByDefault = false
+    var swapLeftAndRightBorderActions = false
+    var revealNextGenuineClozeShortcut = "J"
+    var revealAllGenuineClozesShortcut = "Shift+J"
+    var revealNextPseudoClozeShortcut = "N"
+    var revealAllPseudoClozesShortcut = "Shift+N"
+    // 新增：单击显示内容的配置
+    var clickToReveal = true      // 单击显示内容模式
+    var clickToToggle = true      // 单击切换模式（现在支持切换）
+    var showAnimation = true      // 显示动画效果
+    // 新增：宽度计算调试模式
+    var debugWidthCalculation = true  // 设置为true可查看宽度计算详情
+
+    var enhancedClozesData = {
+        "clozeId": [],
+        "answers": [],
+        "hints": [],
+    }
+
+    // 简化的cloze管理函数，专注于单击显示内容
+    function manageCloze(elem, displayOption, allowInput = true, allowRepeat = true) {
+        if (elem == null) return
+
+        // Get the cloze element
+        var cloze;
+        if (elem.classList.contains("genuine-cloze") || elem.classList.contains("pseudo-cloze")) {
+            cloze = elem
+        } else {
+            cloze = $(elem).closest(".genuine-cloze")[0] || $(elem).closest(".pseudo-cloze")[0]
+        }
+
+        if (!cloze) return;
+
+        var index = $(cloze).attr('index');
+        var answer = enhancedClozesData["answers"][index]
+        var hint = enhancedClozesData["hints"][index]
+        var key = cloze.querySelector('.key');
+        var entry = cloze.querySelector('.entry');
+
+        if (!showHintsForPseudoClozes && cloze.classList.contains('pseudo-cloze')) {
+            hint = ""
+        }
+
+        // Handle pseudo clozes that should be revealed by default
+        if (revealPseudoClozesByDefault || answer.startsWith('#')) {
+            if (answer.startsWith('#')) {
+                answer = answer.slice(1)
+            }
+            if (cloze.classList.contains('pseudo-cloze')) {
+                $(cloze).attr('show-state', 'answer');
+                key.innerHTML = answer;
+                key.style.opacity = 1;
+                return
+            }
+        }
+
+        // 简化的显示逻辑 - 直接显示答案
+        if (displayOption == 'answer') {
+            // 显示答案
+            $(cloze).attr('show-state', 'answer');
+            key.innerHTML = answer;
+            key.style.opacity = 1;
+            key.style.display = "inline";
+            entry.style.display = "none";
+            
+            // 添加显示动画
+            if (showAnimation) {
+                $(cloze).addClass('cloze-revealed');
+                setTimeout(() => {
+                    $(cloze).removeClass('cloze-revealed');
+                }, 300);
+            }
+            
+        } else if (displayOption == 'hint') {
+            // 隐藏答案 - 让Anki自动处理下划线显示
+            $(cloze).attr('show-state', 'hint');
+            key.innerHTML = '';
+            key.style.opacity = 0;
+            key.style.display = "inline";
+            entry.style.display = "none";
+            
+            // 移除显示动画类
+            $(cloze).removeClass('cloze-revealed');
+        } else if (displayOption == 'toggle') {
+            // 切换显示状态
+            var currentState = $(cloze).attr('show-state');
+            if (currentState === 'hint') {
+                manageCloze(cloze, 'answer');
+            } else {
+                manageCloze(cloze, 'hint');
+            }
+        }
+
+        // 重新运行MathJax
+        try {
+            MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
+        } catch { }
+        try {
+            MathJax.typesetPromise()
+        } catch { }
+    }
+
+    // Quizify辅助功能
+    window.toggleExpand = function (el) {
+        const collapse = el.nextElementSibling;
+        if (collapse.style.display === "block") {
+            collapse.style.display = "none";
+            el.classList.remove("active");
+        } else {
+            collapse.style.display = "block";
+            el.classList.add("active");
+        }
+    }
+
+    window.toggleReveal = function (el) {
+        const secret = el.querySelector('.secret');
+        if (secret.style.display === "inline") {
+            secret.style.display = "none";
+            el.classList.remove("active");
+        } else {
+            secret.style.display = "inline";
+            el.classList.add("active");
+        }
+    }
+
+    window.togglePopup = function (popup, e) {
+        const comment = popup.querySelector('.comment');
+        if (comment.style.visibility === "visible") {
+            comment.style.opacity = 0;
+            comment.style.visibility = "hidden";
+        } else {
+            // 显示注释前先计算位置，防止超出屏幕边界
+            comment.style.visibility = "visible";
+            comment.style.opacity = 1;
+            
+            // 获取popup和comment的位置信息
+            const popupRect = popup.getBoundingClientRect();
+            const commentRect = comment.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            
+            // 检查注释是否会超出左边界
+            if (popupRect.left - commentRect.width / 2 < 20) {
+                comment.style.left = "0";
+                comment.style.transform = "none";
+            }
+            // 检查注释是否会超出右边界
+            else if (popupRect.left + commentRect.width / 2 > viewportWidth - 20) {
+                comment.style.left = "auto";
+                comment.style.right = "0";
+                comment.style.transform = "none";
+            }
+            // 正常居中显示
+            else {
+                comment.style.left = "50%";
+                comment.style.right = "auto";
+                comment.style.transform = "translateX(-50%)";
+            }
+        }
+        e.stopPropagation();
+    }
+
+    // 精确的文本宽度计算函数
+    function calculateTextWidth(text) {
+        if (!text || text.length === 0) {
+            return 3; // 默认最小宽度
+        }
         
-        // Add active class to section headers
-        $('#note-header .caption').addClass('active')
-        $('#info-header .caption').addClass('active')
-        $('#mnemonics-header .caption').addClass('active')
-        $('#extra-header .caption').addClass('active')
-        */
+        try {
+            // 创建临时元素来测量实际文本宽度
+            var tempElement = document.createElement('span');
+            tempElement.style.cssText = `
+                position: absolute;
+                visibility: hidden;
+                height: 0;
+                overflow: hidden;
+                font-family: var(--font-blank, "Sassoon Montessori", "Jiashu", Arial, serif);
+                font-size: 1rem;
+                font-weight: bold;
+                letter-spacing: 0.06em;
+                white-space: nowrap;
+                padding: 0 0.4em 0.06em;
+                margin: 0 0.2em;
+                box-sizing: border-box;
+                vertical-align: text-bottom;
+                line-height: 1.2;
+            `;
+            tempElement.textContent = text;
+            
+            // 添加到DOM中测量
+            document.body.appendChild(tempElement);
+            var actualWidth = tempElement.offsetWidth;
+            document.body.removeChild(tempElement);
+            
+            // 转换为em单位（假设1rem = 16px）
+            var widthInEm = actualWidth / 16;
+            
+            // 确保最小宽度，并添加一些缓冲
+            var finalWidth = Math.max(3, widthInEm + 0.2);
+            
+            return finalWidth;
+        } catch (error) {
+            // 备用方案：使用字符长度估算
+            if (debugWidthCalculation) {
+                console.warn('DOM测量失败，使用备用方案:', error);
+            }
+            
+            var answerLength = text.length;
+            var chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
+            var englishChars = answerLength - chineseChars;
+            
+            // 简化的估算：中文字符1.2em，英文字符0.6em
+            var estimatedWidth = chineseChars * 1.2 + englishChars * 0.6 + 0.8;
+            return Math.max(3, estimatedWidth);
+        }
+    }
+
+    $(function () {
+        // 全局清理：确保每次卡片加载时都清理之前的事件
+        if (window.enhancedClozeCleanup) {
+            window.enhancedClozeCleanup();
+        }
+        
+        // 准备挖空数据
+        function prepareEnhancedClozesData() {
+            var content = document.getElementById("enhanced-cloze-content").innerHTML
+            // 解码HTML实体
+            content = content.replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+
+            const clozeRegex = /{(?:){c(\d+)::([\W\w]*?)(?:::([\W\w]*?))?}}/g
+            var match = clozeRegex.exec(content);
+            while (match != null) {
+                enhancedClozesData["clozeId"].push(match[1])
+                enhancedClozesData["answers"].push(match[2])
+                enhancedClozesData["hints"].push(match[3] !== undefined ? match[3] : "")
+                match = clozeRegex.exec(content);
+            }
+        }
+
+        // 设置点击事件
+        function setupClozeEvents() {
+            // 先清理之前的事件监听器，防止累积
+            cleanupClozeEvents();
+            
+            // 移除条件检查，确保事件总是被绑定
+            if (/webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                setupIOsClozeClickEvents()
+            } else {
+                setupDesktopAndAndroidClozeClickEvents()
+            }
+        }
+
+        function cleanupClozeEvents() {
+            // 解绑所有相关的事件监听器
+            $(document).off('click', '.pseudo-cloze, .genuine-cloze');
+            $(document).off('click', '#show-one-cloze-left');
+            $(document).off('click', '#show-one-cloze-right');
+            $(document).off('touchstart', '.pseudo-cloze, .genuine-cloze');
+            $(document).off('touchend', '.pseudo-cloze, .genuine-cloze');
+            $(document).off('touchstart', '#show-one-cloze-left');
+            $(document).off('touchend', '#show-one-cloze-left');
+            $(document).off('touchstart', '#show-one-cloze-right');
+            $(document).off('touchend', '#show-one-cloze-right');
+        }
+
+        // 设置全局清理函数
+        window.enhancedClozeCleanup = function() {
+            cleanupClozeEvents();
+        }
+
+        function setupDesktopAndAndroidClozeClickEvents() {
+            // 单击事件处理 - 点击显示，再次点击隐藏
+            $(document).on('click', '.pseudo-cloze, .genuine-cloze', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                
+                // 检查当前状态，切换显示/隐藏
+                var currentState = $(this).attr('show-state');
+                if (currentState === 'answer') {
+                    // 当前显示答案，点击后隐藏
+                    manageCloze(this, 'hint');
+                } else {
+                    // 当前隐藏，点击后显示答案
+                    manageCloze(this, 'answer');
+                }
+            });
+        }
+
+        function setupIOsClozeClickEvents() {
+            addMobileClickHandler('.pseudo-cloze, .genuine-cloze', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                
+                // 检查当前状态，切换显示/隐藏
+                var currentState = $(this).attr('show-state');
+                if (currentState === 'answer') {
+                    // 当前显示答案，点击后隐藏
+                    manageCloze(this, 'hint');
+                } else {
+                    // 当前隐藏，点击后显示答案
+                    manageCloze(this, 'answer');
+                }
+            })
+        }
+
+        function addMobileClickHandler(selector, callback) {
+            const distanceThreshold = 10;
+            let touchStartPosition = null;
+
+            $(document).on('touchstart', selector, function (event) {
+                const touches = event.originalEvent.touches;
+                if (touches.length === 1) {
+                    const touch = touches[0];
+                    touchStartPosition = { x: touch.clientX, y: touch.clientY };
+                } else {
+                    touchStartPosition = null;
+                }
+            });
+
+            $(document).on('touchend', selector, function (event) {
+                const changedTouches = event.originalEvent.changedTouches;
+                if (touchStartPosition && changedTouches.length === 1) {
+                    const changedTouch = changedTouches[0];
+                    const touchEndX = changedTouch.clientX;
+                    const touchEndY = changedTouch.clientY;
+                    const diffX = Math.abs(touchStartPosition.x - touchEndX);
+                    const diffY = Math.abs(touchStartPosition.y - touchEndY);
+                    if (diffX < distanceThreshold && diffY < distanceThreshold) {
+                        callback.call(this, event);
+                    }
+                }
+                touchStartPosition = null;
+            });
+        }
+
+        // 初始化
+        prepareEnhancedClozesData();
+        setupClozeEvents();
 
         // The setTimeout is needed on AnkiMobile so that the cloze is rendered before we try to toggle it
         setTimeout(function () {

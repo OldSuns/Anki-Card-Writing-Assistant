@@ -173,6 +173,9 @@
         }
 
         function setupClozeEvents() {
+            // 先清理之前的事件监听器，防止累积
+            cleanupClozeEvents();
+            
             // 移除条件检查，确保事件总是被绑定
             if (/webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
                 setupIOsClozeClickEvents()
@@ -180,6 +183,19 @@
                 setupDesktopAndAndroidClozeClickEvents()
             }
             setupClozeKeyEvents()
+        }
+
+        function cleanupClozeEvents() {
+            // 解绑所有相关的事件监听器
+            $(document).off('click', '.pseudo-cloze, .genuine-cloze');
+            $(document).off('click', '#show-one-cloze-left');
+            $(document).off('click', '#show-one-cloze-right');
+            $(document).off('touchstart', '.pseudo-cloze, .genuine-cloze');
+            $(document).off('touchend', '.pseudo-cloze, .genuine-cloze');
+            $(document).off('touchstart', '#show-one-cloze-left');
+            $(document).off('touchend', '#show-one-cloze-left');
+            $(document).off('touchstart', '#show-one-cloze-right');
+            $(document).off('touchend', '#show-one-cloze-right');
         }
 
         function setupDesktopAndAndroidClozeClickEvents() {
