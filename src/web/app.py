@@ -1022,6 +1022,91 @@ class WebApp:
                     'error': str(e)
                 }), 500
 
+        @self.app.route('/api/download-all', methods=['POST'])
+        def download_all_files():
+            """下载全部文件（生成压缩包）"""
+            try:
+                import zipfile
+                from datetime import datetime
+                
+                data = request.get_json()
+                cards_data = data.get('cards', [])
+                deck_name = data.get('deck_name', 'AI生成卡片')
+                export_formats = data.get('export_formats', ['json'])  # 获取用户选择的导出格式
+                
+                if not cards_data:
+                    return jsonify({
+                        'success': False,
+                        'error': '请提供卡片数据'
+                    }), 400
+
+                # 生成时间戳
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                zip_filename = f"anki_cards_{timestamp}.zip"
+                output_dir = Path(self.assistant.config["export"]["output_directory"])
+                zip_path = output_dir / zip_filename
+
+                # 创建压缩包
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                    # 将卡片数据转换为CardData对象
+                    from src.core.card_generator import CardData
+                    cards = []
+                    for card_dict in cards_data:
+                        card = CardData(
+                            front=card_dict.get('front', ''),
+                            back=card_dict.get('back', ''),
+                            deck=card_dict.get('deck', deck_name),
+                            tags=card_dict.get('tags', []),
+                            model=card_dict.get('model', 'Basic'),
+                            fields=card_dict.get('fields', {})
+                        )
+                        cards.append(card)
+
+                    # 生成用户选择的格式的文件并添加到压缩包
+                    base_filename = f"anki_cards_{timestamp}"
+                    
+                    for format_type in export_formats:
+                        try:
+                            if format_type == 'apkg':
+                                # 导出APKG文件
+                                export_path = self.assistant.export_apkg(cards, f"{base_filename}.apkg")
+                            else:
+                                # 导出其他格式
+                                export_path = self.assistant.export_cards(cards, [format_type])
+                                if format_type in export_path:
+                                    export_path = export_path[format_type]
+                                else:
+                                    continue
+                            
+                            # 将文件添加到压缩包
+                            if Path(export_path).exists():
+                                zipf.write(export_path, Path(export_path).name)
+                                self.logger.info(f"已添加文件到压缩包: {export_path}")
+                            
+                        except Exception as e:
+                            self.logger.warning(f"生成{format_type}格式文件失败: {e}")
+                            continue
+
+                    
+
+                self.logger.info(f"压缩包生成成功: {zip_path}")
+                
+                return jsonify({
+                    'success': True,
+                    'data': {
+                        'filename': zip_filename,
+                        'file_path': str(zip_path),
+                        'card_count': len(cards)
+                    }
+                })
+
+            except Exception as e:
+                self.logger.error(f"生成压缩包失败: {e}")
+                return jsonify({
+                    'success': False,
+                    'error': str(e)
+                }), 500
+
         @self.app.route('/api/test-llm', methods=['POST'])
         def test_llm():
             """测试LLM连接，输入固定或来自请求体"""

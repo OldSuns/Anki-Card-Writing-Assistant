@@ -91,7 +91,6 @@ class AnkiCardAssistant {
         this.elements.btnLoading = this.elements.generateBtn?.querySelector('.btn-loading');
         this.elements.prevCard = document.getElementById('prev-card');
         this.elements.nextCard = document.getElementById('next-card');
-        this.elements.exportApkgBtn = document.getElementById('export-apkg-btn');
         this.elements.confirmApkgExport = document.getElementById('confirm-apkg-export');
 
         
@@ -350,17 +349,20 @@ class AnkiCardAssistant {
             }
         });
 
-        // APKG导出
-        this.elements.exportApkgBtn?.addEventListener('click', () => {
-            this.showApkgExportModal();
-        });
-
         this.elements.confirmApkgExport?.addEventListener('click', () => {
             this.exportApkg();
         });
 
         // 文件上传相关事件
         this.initFileUploadListeners();
+
+        // 下载全部按钮事件
+        const downloadAllBtn = document.getElementById('download-all-btn');
+        if (downloadAllBtn) {
+            downloadAllBtn.addEventListener('click', () => {
+                this.downloadAllFiles();
+            });
+        }
 
         // 键盘快捷键
         document.addEventListener('keydown', (e) => {
@@ -831,13 +833,7 @@ class AnkiCardAssistant {
         }
     }
 
-    showApkgExportModal() {
-        if (this.currentCards.length === 0) {
-            this.showToast('warning', '请先生成卡片');
-            return;
-        }
-        this.modals.apkgExport?.show();
-    }
+
 
     async exportApkg() {
         const deckName = document.getElementById('deck-name')?.value || 'AI生成卡片';
@@ -894,6 +890,54 @@ class AnkiCardAssistant {
         } catch (error) {
             console.error('APKG文件下载错误:', error);
             this.showToast('error', 'APKG文件下载失败');
+        }
+    }
+
+    // 下载全部文件（压缩包）
+    async downloadAllFiles() {
+        try {
+            // 检查是否有当前生成的卡片数据
+            if (!this.currentCards || this.currentCards.length === 0) {
+                this.showToast('warning', '没有可下载的文件，请先生成卡片');
+                return;
+            }
+
+            // 显示加载状态
+            this.showToast('info', '正在生成压缩包...');
+            
+            // 调用后端API生成压缩包
+            const response = await fetch('/api/download-all', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    cards: this.currentCards,
+                    deck_name: this.elements.deckNameInput?.value || 'AI生成卡片',
+                    export_formats: this.getSelectedExportFormats()
+                })
+            });
+
+            const result = await response.json();
+            
+            if (result.success) {
+                // 下载压缩包
+                const link = document.createElement('a');
+                link.href = `/download/${encodeURIComponent(result.data.filename)}`;
+                link.download = result.data.filename;
+                link.style.display = 'none';
+                
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                
+                this.showToast('success', `压缩包下载开始: ${result.data.filename}`);
+            } else {
+                this.showToast('error', result.error || '生成压缩包失败');
+            }
+        } catch (error) {
+            console.error('下载全部文件失败:', error);
+            this.showToast('error', '下载全部文件失败');
         }
     }
 
