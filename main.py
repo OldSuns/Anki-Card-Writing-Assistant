@@ -158,6 +158,8 @@ class WebAppLauncher:
     def parse_arguments():
         """解析命令行参数"""
         parser = argparse.ArgumentParser(description=f"Anki写卡助手 v{__version__} - Web界面")
+        parser.add_argument("--web", action="store_true",
+                          help="启动Web界面（兼容性参数）")
         parser.add_argument("--debug", action="store_true",
                           help="启用Flask调试与自动重载")
         parser.add_argument("--host", default="0.0.0.0", help="Web服务器主机地址")
