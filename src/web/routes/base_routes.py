@@ -17,6 +17,10 @@ class BaseRoutes:
         def index():
             return render_template('index.html')
 
+        @self.app.route('/card-merge')
+        def card_merge():
+            return render_template('card_merge.html')
+
         @self.app.route('/favicon.ico')
         def favicon():
             return send_from_directory(

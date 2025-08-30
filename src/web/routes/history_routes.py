@@ -23,7 +23,7 @@ class HistoryRoutes:
         @handle_api_error
         def get_history():
             history_records = self.history_handler.get_history_records()
-            return ResponseUtils.success_response(data=history_records)
+            return ResponseUtils.success_response(data={'records': history_records})
 
         @self.app.route('/api/history/<record_id>/detail')
         @handle_api_error

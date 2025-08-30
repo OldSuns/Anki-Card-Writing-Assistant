@@ -135,6 +135,67 @@ class ErrorAnalyzer:
             return err_text
 
 
+class CardMergeProcessor:
+    """卡片合并处理器"""
+    
+    @staticmethod
+    def merge_card_data(card_sources: List[Dict], merged_deck_name: str, template_name: str = None) -> List[Dict]:
+        """合并多个卡片数据源"""
+        merged_cards = []
+        
+        for source in card_sources:
+            cards_data = source.get('cards', [])
+            
+            # 处理每个卡片，统一格式并更新牌组名称
+            for card in cards_data:
+                if isinstance(card, dict):
+                    # 创建卡片副本，避免修改原始数据
+                    merged_card = card.copy()
+                    
+                    # 统一牌组名称
+                    merged_card['deck'] = merged_deck_name
+                    merged_card['deckName'] = merged_deck_name
+                    
+                    # 更新模型名称为选择的模板
+                    if template_name:
+                        merged_card['model'] = template_name
+                        merged_card['modelName'] = template_name
+                    
+                    # 如果有fields字段，也更新其中的Deck字段
+                    if 'fields' in merged_card and isinstance(merged_card['fields'], dict):
+                        merged_card['fields']['Deck'] = merged_deck_name
+                    
+                    # 保持原始标签不变，不做任何修改
+                    
+                    merged_cards.append(merged_card)
+        
+        return merged_cards
+    
+    @staticmethod
+    def get_merge_preview(card_sources: List[Dict]) -> Dict[str, Any]:
+        """获取合并预览信息"""
+        total_cards = 0
+        total_sources = len(card_sources)
+        source_details = []
+        
+        for source in card_sources:
+            cards_count = len(source.get('cards', []))
+            total_cards += cards_count
+            
+            source_details.append({
+                'name': source.get('source_name', '未知来源'),
+                'type': source.get('source_type', 'unknown'),
+                'card_count': cards_count,
+                'deck_name': source.get('original_deck_name', '未知牌组')
+            })
+        
+        return {
+            'total_cards': total_cards,
+            'total_sources': total_sources,
+            'source_details': source_details
+        }
+
+
 class BusinessLogicHandler:
     """业务逻辑处理器 - 整合所有业务逻辑组件"""
     
@@ -147,6 +208,7 @@ class BusinessLogicHandler:
         self.config_processor = ConfigProcessor()
         self.async_runner = AsyncTaskRunner(self.logger)
         self.error_analyzer = ErrorAnalyzer()
+        self.card_merge_processor = CardMergeProcessor()
 
     def process_card_generation(self, content: str, data: dict) -> Dict[str, Any]:
         """处理卡片生成的完整流程"""
@@ -246,6 +308,82 @@ class BusinessLogicHandler:
         return {
             'export_path': export_path,
             'filename': Path(export_path).name
+        }
+
+    def process_card_merge(self, card_sources: List[Dict], merged_deck_name: str, 
+                          export_formats: List[str], template_name: str = None) -> Dict[str, Any]:
+        """处理卡片合并的完整流程"""
+        # 合并卡片数据，传递模板名称以更新卡片的模型
+        merged_cards_data = self.card_merge_processor.merge_card_data(
+            card_sources, merged_deck_name, template_name
+        )
+        
+        # 转换为CardData对象
+        cards = self.card_processor.convert_to_card_objects(
+            merged_cards_data, merged_deck_name
+        )
+        
+        # 确保包含JSON格式
+        export_formats = self.config_processor.ensure_json_in_formats(export_formats)
+        
+        # 构建合并配置信息
+        merge_config = {
+            'merged_deck_name': merged_deck_name,
+            'source_count': len(card_sources),
+            'total_cards': len(merged_cards_data),
+            'template_name': template_name
+        }
+        
+        # 导出合并后的卡片，使用指定的模板
+        if template_name:
+            # 使用统一导出器和模板管理器
+            try:
+                from src.core.unified_exporter import UnifiedExporter
+                from src.templates.template_manager import TemplateManager
+                
+                template_manager = TemplateManager()
+                exporter = UnifiedExporter(template_manager=template_manager)
+                
+                # 使用统一导出器的多格式导出方法
+                export_paths = exporter.export_multiple_formats(
+                    cards, export_formats,
+                    original_content=f"合并自{len(card_sources)}个卡片来源",
+                    generation_config=merge_config
+                )
+                
+                # 转换路径为相对路径（只保留文件名）
+                for format_type, path in export_paths.items():
+                    export_paths[format_type] = Path(path).name
+                    
+            except Exception as e:
+                self.logger.error(f"使用模板导出失败: {e}")
+                # 如果模板导出失败，回退到默认导出方式
+                export_paths = self.assistant.export_cards(
+                    cards, export_formats,
+                    original_content=f"合并自{len(card_sources)}个卡片来源",
+                    generation_config=merge_config
+                )
+        else:
+            # 默认导出方式
+            export_paths = self.assistant.export_cards(
+                cards, export_formats,
+                original_content=f"合并自{len(card_sources)}个卡片来源",
+                generation_config=merge_config
+            )
+        
+        # 生成摘要
+        summary = self.assistant.get_export_summary(cards)
+        serializable_cards = self.card_processor.serialize_cards(cards)
+        
+        return {
+            'cards': serializable_cards,
+            'export_paths': export_paths,
+            'summary': summary,
+            'merge_info': {
+                'total_sources': len(card_sources),
+                'total_cards': len(merged_cards_data),
+                'merged_deck_name': merged_deck_name
+            }
         }
 
     def handle_llm_test_error(self, error: Exception) -> str:

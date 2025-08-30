@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>卡片合并 - Anki写卡助手</title>
+    <meta name="description" content="合并多个Anki卡组文件，创建统一的卡片集合">
+    
+    <!-- 预加载关键资源 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- 字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- 样式表 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <link rel="shortcut icon" type="image/x-icon" href="/static/favicon.ico">
+    
+    <!-- PWA支持 -->
+    <meta name="theme-color" content="#4a90e2">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Anki写卡助手">
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- 现代化导航栏 -->
+        <nav class="navbar navbar-expand-lg navbar-dark">
+            <div class="container">
+                <a class="navbar-brand d-flex align-items-center" href="/">
+                    <i class="fas fa-brain me-2"></i>
+                    <span>Anki写卡助手</span>
+                </a>
+                
+                <div class="d-flex align-items-center gap-3">
+                    <!-- 返回主页按钮 -->
+                    <a href="/" class="btn btn-outline-light btn-sm" title="返回主页">
+                        <i class="fas fa-home me-2"></i>主页
+                    </a>
+                    
+                    <!-- 历史记录按钮 -->
+                    <button class="btn btn-outline-light btn-sm" id="history-btn" title="历史记录">
+                        <i class="fas fa-history"></i>
+                    </button>
+                    
+                    <!-- 设置按钮 -->
+                    <button class="btn btn-outline-light btn-sm" id="settings-btn" title="设置">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+        </nav>
+
+        <div class="container mt-4">
+            <!-- 页面标题 -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <h2 class="text-center">
+                        <i class="fas fa-layer-group me-2"></i>卡片合并工具
+                    </h2>
+                    <p class="text-center text-muted">将多个Anki卡组文件合并为一个统一的卡片集合</p>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- 左侧控制面板 -->
+                <div class="col-lg-5">
+                    <!-- 卡片来源选择 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-plus-circle me-2"></i>添加卡片来源
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- 来源选择方式 -->
+                            <div class="mb-3">
+                                <div class="btn-group w-100" role="group" aria-label="卡片来源选择">
+                                    <input type="radio" class="btn-check" name="source-method" id="history-source" value="history" checked>
+                                    <label class="btn btn-outline-primary" for="history-source">
+                                        <i class="fas fa-history me-2"></i>历史记录
+                                    </label>
+                                    
+                                    <input type="radio" class="btn-check" name="source-method" id="upload-source" value="upload">
+                                    <label class="btn btn-outline-primary" for="upload-source">
+                                        <i class="fas fa-file-upload me-2"></i>上传文件
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- 历史记录选择区域 -->
+                            <div id="history-source-area">
+                                <div class="mb-3">
+                                    <label class="form-label">从历史记录选择</label>
+                                    <div class="d-flex gap-2 mb-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="load-history-btn">
+                                            <i class="fas fa-sync me-1"></i>加载历史记录
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-success" id="select-all-history-btn" disabled>
+                                            <i class="fas fa-check-double me-1"></i>全选
+                                        </button>
+                                    </div>
+                                    <div id="history-list" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                                        <div class="text-center text-muted py-3">
+                                            <i class="fas fa-inbox fa-2x mb-2"></i>
+                                            <p class="mb-0">点击"加载历史记录"开始选择</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 文件上传区域 -->
+                            <div id="upload-source-area" style="display: none;">
+                                <div class="mb-3">
+                                    <label class="form-label">上传JSON卡组文件</label>
+                                    
+                                    <!-- 文件拖拽区域 -->
+                                    <div class="file-drop-zone" id="merge-file-drop-zone">
+                                        <div class="file-drop-content">
+                                            <i class="fas fa-cloud-upload-alt fa-2x text-muted mb-2"></i>
+                                            <h6>拖拽JSON文件到此处或点击选择</h6>
+                                            <p class="text-muted small">支持 .json 格式的Anki卡组文件</p>
+                                            <input type="file" id="merge-file-upload-input" accept=".json" multiple style="display: none;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="button" class="btn btn-primary" id="add-source-btn" disabled>
+                                    <i class="fas fa-plus me-2"></i>添加到合并列表
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 合并设置 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-cogs me-2"></i>合并设置
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <!-- 卡片模板选择 -->
+                            <div class="mb-3">
+                                <label for="template-select" class="form-label">
+                                    <i class="fas fa-layer-group me-2"></i>卡片模板
+                                </label>
+                                <select class="form-select" id="template-select">
+                                    <option value="">加载中...</option>
+                                </select>
+                                <div class="form-text">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        选择导出卡片使用的模板格式
+                                    </small>
+                                </div>
+                            </div>
+
+                            <!-- 合并后的牌组名称 -->
+                            <div class="mb-3">
+                                <label for="merged-deck-name" class="form-label">
+                                    <i class="fas fa-folder me-2"></i>合并后牌组名称
+                                </label>
+                                <input type="text" class="form-control" id="merged-deck-name" 
+                                       placeholder="输入合并后的牌组名称" value="合并卡组">
+                                <div class="form-text">
+                                    <small class="text-muted">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        所有卡片将归入此牌组名称
+                                    </small>
+                                </div>
+                            </div>
+
+                            <!-- 导出格式 -->
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <i class="fas fa-download me-2"></i>导出格式
+                                </label>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input export-format-checkbox" type="checkbox" value="html" id="merge-export-html">
+                                            <label class="form-check-label" for="merge-export-html">
+                                                <i class="fas fa-code me-2"></i>HTML
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input export-format-checkbox" type="checkbox" value="apkg" id="merge-export-apkg" checked>
+                                            <label class="form-check-label" for="merge-export-apkg">
+                                                <i class="fas fa-file-export me-2"></i>APKG
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-6">
+                                        <div class="form-check">
+                                            <input class="form-check-input export-format-checkbox" type="checkbox" value="csv" id="merge-export-csv">
+                                            <label class="form-check-label" for="merge-export-csv">
+                                                <i class="fas fa-table me-2"></i>CSV
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input export-format-checkbox" type="checkbox" value="txt" id="merge-export-txt">
+                                            <label class="form-check-label" for="merge-export-txt">
+                                                <i class="fas fa-file-alt me-2"></i>TXT
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 合并按钮 -->
+                            <div class="d-grid">
+                                <button type="button" class="btn btn-success btn-lg" id="merge-cards-btn" disabled>
+                                    <span class="btn-content">
+                                        <i class="fas fa-layer-group me-2"></i>
+                                        <span>开始合并卡片</span>
+                                    </span>
+                                    <span class="btn-loading d-none">
+                                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                        <span>正在合并...</span>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧预览区域 -->
+                <div class="col-lg-7">
+                    <!-- 待合并列表 -->
+                    <div class="card mb-4">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-list me-2"></i>待合并列表
+                            </h5>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-primary" id="merge-list-count">0 个来源</span>
+                                <button type="button" class="btn btn-outline-danger btn-sm" id="clear-merge-list-btn" disabled>
+                                    <i class="fas fa-trash me-1"></i>清空
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="merge-list" class="list-group">
+                                <div class="text-center text-muted py-4" id="merge-list-empty">
+                                    <i class="fas fa-layer-group fa-3x mb-3"></i>
+                                    <p class="mb-0">暂无待合并的卡片来源</p>
+                                    <small class="text-muted">请从左侧添加卡片来源</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 合并预览 -->
+                    <div class="card mb-4 d-none" id="merge-preview-card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-eye me-2"></i>合并预览
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row" id="merge-preview-stats">
+                                <!-- 合并统计信息 -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 合并结果 -->
+                    <div class="card d-none" id="merge-result-card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-check-circle me-2"></i>合并结果
+                            </h5>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="download-merged-all-btn">
+                                <i class="fas fa-download me-2"></i>下载全部
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div class="row" id="merge-result-summary">
+                                <!-- 合并结果摘要 -->
+                            </div>
+                            <div class="mt-3" id="merge-export-links">
+                                <!-- 导出链接 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录选择模态框 -->
+    <div class="modal fade" id="history-selection-modal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-history me-2"></i>选择历史记录
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- 加载状态 -->
+                    <div id="modal-history-loading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">正在加载历史记录...</p>
+                    </div>
+                    
+                    <!-- 历史记录列表 -->
+                    <div id="modal-history-list" class="d-none">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h6 class="mb-0">选择要合并的记录</h6>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-outline-primary btn-sm" id="modal-select-all-btn">
+                                    <i class="fas fa-check-double me-1"></i>全选
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" id="modal-clear-selection-btn">
+                                    <i class="fas fa-times me-1"></i>清除选择
+                                </button>
+                            </div>
+                        </div>
+                        <div id="modal-history-records" class="list-group" style="max-height: 400px; overflow-y: auto;">
+                            <!-- 历史记录项将在这里动态生成 -->
+                        </div>
+                    </div>
+                    
+                    <!-- 空状态 -->
+                    <div id="modal-history-empty" class="text-center py-4 d-none">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <h6 class="text-muted">暂无历史记录</h6>
+                        <p class="text-muted small">您还没有生成过任何卡片</p>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" id="confirm-history-selection-btn" disabled>
+                        <i class="fas fa-check me-2"></i>确认选择 (<span id="selected-count">0</span>)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 设置模态框 (复用主页的设置模态框) -->
+    <div class="modal fade" id="settings-modal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-cog me-2"></i>应用设置
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-center text-muted">
+                        <i class="fas fa-info-circle me-2"></i>
+                        卡片合并功能不需要AI设置，请返回主页进行AI配置
+                    </p>
+                    <div class="text-center">
+                        <a href="/" class="btn btn-primary">
+                            <i class="fas fa-home me-2"></i>返回主页
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 历史记录模态框 (简化版) -->
+    <div class="modal fade" id="history-modal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-history me-2"></i>历史生成记录</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-center text-muted">
+                        <i class="fas fa-info-circle me-2"></i>
+                        请返回主页查看完整的历史记录功能
+                    </p>
+                    <div class="text-center">
+                        <a href="/" class="btn btn-primary">
+                            <i class="fas fa-home me-2"></i>返回主页
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 错误提示吐司 -->
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1100">
+        <div id="error-toast" class="toast hide" role="alert">
+            <div class="toast-header">
+                <i class="fas fa-exclamation-triangle text-danger me-2"></i>
+                <strong class="me-auto">错误</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="error-toast-body">
+                <!-- 错误消息 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 成功提示吐司 -->
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1100; margin-top: 80px;">
+        <div id="success-toast" class="toast hide" role="alert">
+            <div class="toast-header">
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <strong class="me-auto">成功</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body" id="success-toast-body">
+                <!-- 成功消息 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/card-merge.js"></script>
+</body>
+</html>

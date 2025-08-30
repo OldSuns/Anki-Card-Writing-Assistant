@@ -1234,3 +1234,51 @@ html {
         padding: 0.5rem 0.75rem;
     }
 }
+
+/* 卡片合并按钮样式 - 与其他导航按钮保持一致 */
+a[href="/card-merge"].btn {
+    border: 2px solid rgba(74, 144, 226, 0.3) !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: var(--text-primary) !important;
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+a[href="/card-merge"].btn:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(74, 144, 226, 0.5) !important;
+    color: var(--text-primary) !important;
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+a[href="/card-merge"].btn:focus {
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+    border-color: rgba(74, 144, 226, 0.5) !important;
+    color: var(--text-primary) !important;
+    text-decoration: none;
+}
+
+/* 主页按钮样式 - 与其他导航按钮保持一致 */
+a[href="/"].btn, #home-btn {
+    border: 2px solid rgba(74, 144, 226, 0.3) !important;
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: var(--text-primary) !important;
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+a[href="/"].btn:hover, #home-btn:hover {
+    background: rgba(255, 255, 255, 0.3) !important;
+    border-color: rgba(74, 144, 226, 0.5) !important;
+    color: var(--text-primary) !important;
+    transform: translateY(-1px);
+    text-decoration: none;
+}
+
+a[href="/"].btn:focus, #home-btn:focus {
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+    border-color: rgba(74, 144, 226, 0.5) !important;
+    color: var(--text-primary) !important;
+    text-decoration: none;
+}

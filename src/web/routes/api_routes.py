@@ -1,5 +1,6 @@
 """API路由模块"""
 
+import json
 from flask import request
 from src.web.error_handler import handle_api_error, handle_validation_error, handle_network_error
 from src.web.utils import ResponseUtils, ValidationUtils
@@ -19,6 +20,7 @@ class APIRoutes:
         self._register_info_routes()
         self._register_generation_routes()
         self._register_settings_routes()
+        self._register_merge_routes()
     
     def _register_info_routes(self):
         """注册信息获取路由"""
@@ -186,3 +188,109 @@ class APIRoutes:
                 'llm': self.assistant.config.get("llm", {}),
                 'export': self.assistant.config.get("export", {})
             })
+
+    def _register_merge_routes(self):
+        """注册卡片合并路由"""
+
+        @self.app.route('/api/merge/preview', methods=['POST'])
+        @handle_validation_error
+        def get_merge_preview():
+            """获取合并预览信息"""
+            data = request.get_json()
+            card_sources = data.get('card_sources', [])
+            
+            if not card_sources:
+                return ResponseUtils.error_response('请提供要合并的卡片来源', 400)
+            
+            preview_info = self.business_logic.card_merge_processor.get_merge_preview(card_sources)
+            return ResponseUtils.success_response(data=preview_info)
+
+        @self.app.route('/api/merge', methods=['POST'])
+        @handle_validation_error
+        def merge_cards():
+            """合并卡片"""
+            data = request.get_json()
+            card_sources = data.get('card_sources', [])
+            merged_deck_name = data.get('merged_deck_name', '合并卡组')
+            export_formats = data.get('export_formats', ['json', 'apkg'])
+            template_name = data.get('template', '')
+            
+            if not card_sources:
+                return ResponseUtils.error_response('请提供要合并的卡片来源', 400)
+            
+            if ValidationUtils.is_empty_content(merged_deck_name):
+                return ResponseUtils.error_response('请提供合并后的牌组名称', 400)
+            
+            if not template_name:
+                return ResponseUtils.error_response('请选择卡片模板', 400)
+            
+            # 验证模板是否存在
+            from src.templates.template_manager import TemplateManager
+            template_manager = TemplateManager()
+            available_templates = template_manager.list_templates()
+            
+            if template_name not in available_templates:
+                return ResponseUtils.error_response(f'模板 "{template_name}" 不存在', 400)
+            
+            try:
+                result = self.business_logic.process_card_merge(
+                    card_sources, merged_deck_name, export_formats, template_name
+                )
+                return ResponseUtils.success_response(data=result)
+            except Exception as e:
+                self.business_logic.logger.error("卡片合并失败: %s", e)
+                return ResponseUtils.error_response(f'卡片合并失败: {str(e)}', 500)
+
+        @self.app.route('/api/merge/parse-file', methods=['POST'])
+        @handle_validation_error
+        def parse_merge_file():
+            """解析上传的JSON文件"""
+            if 'file' not in request.files:
+                return ResponseUtils.error_response('请上传文件', 400)
+            
+            file = request.files['file']
+            if file.filename == '':
+                return ResponseUtils.error_response('请选择文件', 400)
+            
+            if not file.filename.endswith('.json'):
+                return ResponseUtils.error_response('只支持JSON格式文件', 400)
+            
+            try:
+                # 读取JSON文件内容
+                content = file.read().decode('utf-8')
+                card_data = json.loads(content)
+                
+                # 解析卡片数据
+                cards = []
+                deck_name = '未知牌组'
+                
+                if isinstance(card_data, dict):
+                    # 检查是否有metadata格式
+                    if 'metadata' in card_data:
+                        cards = card_data.get('cards', [])
+                        deck_name = card_data['metadata'].get('deck_name', '未知牌组')
+                    elif 'cards' in card_data:
+                        cards = card_data['cards']
+                    else:
+                        # 假设整个字典就是一张卡片
+                        cards = [card_data]
+                elif isinstance(card_data, list):
+                    cards = card_data
+                    # 尝试从第一张卡片获取牌组名称
+                    if cards and isinstance(cards[0], dict):
+                        deck_name = (cards[0].get('deck') or 
+                                   cards[0].get('deckName') or 
+                                   cards[0].get('fields', {}).get('Deck', '未知牌组'))
+                
+                return ResponseUtils.success_response(data={
+                    'cards': cards,
+                    'card_count': len(cards),
+                    'deck_name': deck_name,
+                    'filename': file.filename
+                })
+                
+            except json.JSONDecodeError as e:
+                return ResponseUtils.error_response(f'JSON格式错误: {str(e)}', 400)
+            except Exception as e:
+                self.business_logic.logger.error("解析文件失败: %s", e)
+                return ResponseUtils.error_response(f'解析文件失败: {str(e)}', 500)

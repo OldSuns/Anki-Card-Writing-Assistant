@@ -9,7 +9,7 @@
   },
   "generation": {
     "default_difficulty": "medium",
-    "default_card_count": 1
+    "default_card_count": 3
   },
   "export": {
     "default_formats": ["json", "csv", "html", "apkg"],
