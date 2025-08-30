@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Optional
 
 class HistoryConstants:
     """历史记录处理常量"""
-    SUPPORTED_EXTENSIONS = ['json', 'csv', 'html', 'txt', 'apkg']
+    SUPPORTED_EXTENSIONS = ['json', 'csv', 'html', 'txt', 'apkg', 'zip']
     DEFAULT_DECK_NAME = '未知牌组'
     DEFAULT_CONTENT_PREVIEW = '从卡片数据生成'
     FILENAME_PATTERN = r'anki_cards_(\d{8})_(\d{6})'
@@ -296,16 +296,55 @@ class HistoryHandler:
         }
         
     def delete_history_record(self, record_id: str) -> List[str]:
-        """删除历史记录，返回删除的文件列表"""
+        """删除历史记录，返回删除的文件列表（包括ZIP压缩包）"""
         deleted_files = []
         
+        # 删除标准格式文件
         for ext in HistoryConstants.SUPPORTED_EXTENSIONS:
-            file_path = self.output_dir / f"{record_id}.{ext}"
-            if file_path.exists():
-                file_path.unlink()
-                deleted_files.append(file_path.name)
+            if ext == 'zip':
+                # 对于ZIP文件，使用特殊处理
+                zip_files = self._find_related_zip_files(record_id)
+                for zip_file in zip_files:
+                    if zip_file.exists():
+                        zip_file.unlink()
+                        deleted_files.append(zip_file.name)
+                        self.logger.info(f"已删除ZIP压缩包: {zip_file.name}")
+            else:
+                file_path = self.output_dir / f"{record_id}.{ext}"
+                if file_path.exists():
+                    file_path.unlink()
+                    deleted_files.append(file_path.name)
+                    self.logger.info(f"已删除文件: {file_path.name}")
                 
         return deleted_files
+    
+    def _find_related_zip_files(self, record_id: str) -> List[Path]:
+        """查找与记录相关的ZIP压缩包"""
+        related_zips = []
+        
+        # 直接查找与record_id同名的ZIP文件（新逻辑）
+        zip_file_path = self.output_dir / f"{record_id}.zip"
+        if zip_file_path.exists():
+            related_zips.append(zip_file_path)
+            self.logger.info(f"找到匹配的ZIP文件: {zip_file_path.name}")
+            return related_zips
+        
+        # 如果没有找到完全匹配的，则按原逻辑查找（用于向后兼容）
+        timestamp = self.timestamp_parser.parse_from_filename(record_id)
+        if not timestamp:
+            return related_zips
+        
+        # 查找所有ZIP文件
+        for zip_file in self.output_dir.glob("anki_cards_*.zip"):
+            zip_timestamp = self.timestamp_parser.parse_from_filename(zip_file.stem)
+            if zip_timestamp:
+                # 如果ZIP文件的时间戳与记录时间戳在同一天，则认为是相关的
+                if (zip_timestamp.date() == timestamp.date() and 
+                    abs((zip_timestamp - timestamp).total_seconds()) < 3600):  # 1小时内
+                    related_zips.append(zip_file)
+                    self.logger.info(f"找到相关ZIP文件: {zip_file.name}")
+        
+        return related_zips
         
     def _parse_history_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
         """解析单个历史记录文件"""
@@ -338,17 +377,32 @@ class HistoryHandler:
             return self.record_builder.build_unknown_format(filename, timestamp)
                 
     def _check_related_files(self, record: Dict[str, Any], base_name: str):
-        """检查相关文件是否存在"""
+        """检查相关文件是否存在（包括ZIP压缩包）"""
         for ext in HistoryConstants.SUPPORTED_EXTENSIONS:
-            ext_file = self.output_dir / f"{base_name}.{ext}"
-            if ext_file.exists():
-                record['files'][ext] = {
-                    'exists': True,
-                    'size': ext_file.stat().st_size,
-                    'filename': ext_file.name
-                }
+            if ext == 'zip':
+                # 对于ZIP文件，查找相关的压缩包
+                related_zips = self._find_related_zip_files(base_name)
+                if related_zips:
+                    # 取最新的ZIP文件
+                    latest_zip = max(related_zips, key=lambda f: f.stat().st_mtime)
+                    record['files'][ext] = {
+                        'exists': True,
+                        'size': latest_zip.stat().st_size,
+                        'filename': latest_zip.name
+                    }
+                else:
+                    record['files'][ext] = {'exists': False}
             else:
-                record['files'][ext] = {'exists': False}
+                # 标准格式文件
+                ext_file = self.output_dir / f"{base_name}.{ext}"
+                if ext_file.exists():
+                    record['files'][ext] = {
+                        'exists': True,
+                        'size': ext_file.stat().st_size,
+                        'filename': ext_file.name
+                    }
+                else:
+                    record['files'][ext] = {'exists': False}
                 
     def _process_card_data_for_detail(self, card_data: Any) -> Dict[str, Any]:
         """处理卡片数据用于详情显示"""

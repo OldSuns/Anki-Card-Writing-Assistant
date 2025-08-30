@@ -281,9 +281,13 @@ class FileExporter:
         self.logger = logger
     
     def export_to_json(self, cards: List[CardData], filename: str = None, 
-                      original_content: str = None, generation_config: Dict = None) -> str:
+                      original_content: str = None, generation_config: Dict = None, timestamp: str = None) -> str:
         """导出为JSON格式"""
-        filename = filename or f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        if filename is None:
+            if timestamp:
+                filename = f"anki_cards_{timestamp}.json"
+            else:
+                filename = f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         output_path = self.output_dir / filename
         
         export_data = {
@@ -303,9 +307,13 @@ class FileExporter:
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
         return str(output_path)
     
-    def export_to_csv(self, cards: List[CardData], filename: str = None) -> str:
+    def export_to_csv(self, cards: List[CardData], filename: str = None, timestamp: str = None) -> str:
         """导出为CSV格式"""
-        filename = filename or f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        if filename is None:
+            if timestamp:
+                filename = f"anki_cards_{timestamp}.csv"
+            else:
+                filename = f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         output_path = self.output_dir / filename
         
         # 获取所有字段名并排序
@@ -326,9 +334,13 @@ class FileExporter:
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
         return str(output_path)
     
-    def export_to_txt(self, cards: List[CardData], filename: str = None) -> str:
+    def export_to_txt(self, cards: List[CardData], filename: str = None, timestamp: str = None) -> str:
         """导出为TXT格式"""
-        filename = filename or f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        if filename is None:
+            if timestamp:
+                filename = f"anki_cards_{timestamp}.txt"
+            else:
+                filename = f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
         output_path = self.output_dir / filename
         
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -343,9 +355,13 @@ class FileExporter:
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
         return str(output_path)
     
-    def export_to_html(self, cards: List[CardData], filename: str = None) -> str:
+    def export_to_html(self, cards: List[CardData], filename: str = None, timestamp: str = None) -> str:
         """导出为HTML格式"""
-        filename = filename or f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+        if filename is None:
+            if timestamp:
+                filename = f"anki_cards_{timestamp}.html"
+            else:
+                filename = f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
         output_path = self.output_dir / filename
         
         card_html = []
@@ -421,6 +437,9 @@ class UnifiedExporter:
         export_paths = {}
         template_name = generation_config.get('template_name') if generation_config else None
         
+        # 统一生成时间戳，确保同一批次的所有文件使用相同的时间戳
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
         for format_type in formats:
             try:
                 if format_type in ExportConstants.FORMAT_METHODS:
@@ -428,11 +447,11 @@ class UnifiedExporter:
                     method = getattr(self, method_name)
                     
                     if format_type == 'json':
-                        export_paths[format_type] = method(cards, original_content=original_content, generation_config=generation_config)
+                        export_paths[format_type] = method(cards, timestamp=timestamp, original_content=original_content, generation_config=generation_config)
                     elif format_type == 'apkg':
-                        export_paths[format_type] = method(cards, template_name=template_name)
+                        export_paths[format_type] = method(cards, timestamp=timestamp, template_name=template_name)
                     else:
-                        export_paths[format_type] = method(cards)
+                        export_paths[format_type] = method(cards, timestamp=timestamp)
                         
             except Exception as e:
                 self.logger.error(f"导出{format_type}格式失败: {e}")
@@ -440,25 +459,29 @@ class UnifiedExporter:
         return export_paths
 
     def export_to_json(self, cards: List[CardData], filename: str = None, 
-                      original_content: str = None, generation_config: Dict = None) -> str:
+                      original_content: str = None, generation_config: Dict = None, timestamp: str = None) -> str:
         """导出为JSON格式"""
-        return self.file_exporter.export_to_json(cards, filename, original_content, generation_config)
+        return self.file_exporter.export_to_json(cards, filename, original_content, generation_config, timestamp)
     
-    def export_to_csv(self, cards: List[CardData], filename: str = None) -> str:
+    def export_to_csv(self, cards: List[CardData], filename: str = None, timestamp: str = None) -> str:
         """导出为CSV格式"""
-        return self.file_exporter.export_to_csv(cards, filename)
+        return self.file_exporter.export_to_csv(cards, filename, timestamp)
     
-    def export_to_txt(self, cards: List[CardData], filename: str = None) -> str:
+    def export_to_txt(self, cards: List[CardData], filename: str = None, timestamp: str = None) -> str:
         """导出为TXT格式"""
-        return self.file_exporter.export_to_txt(cards, filename)
+        return self.file_exporter.export_to_txt(cards, filename, timestamp)
     
-    def export_to_html(self, cards: List[CardData], filename: str = None) -> str:
+    def export_to_html(self, cards: List[CardData], filename: str = None, timestamp: str = None) -> str:
         """导出为HTML格式"""
-        return self.file_exporter.export_to_html(cards, filename)
+        return self.file_exporter.export_to_html(cards, filename, timestamp)
     
-    def export_to_apkg(self, cards: List[CardData], filename: str = None, template_name: str = None) -> str:
+    def export_to_apkg(self, cards: List[CardData], filename: str = None, template_name: str = None, timestamp: str = None) -> str:
         """导出为apkg格式"""
-        filename = filename or f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.apkg"
+        if filename is None:
+            if timestamp:
+                filename = f"anki_cards_{timestamp}.apkg"
+            else:
+                filename = f"anki_cards_{datetime.now().strftime('%Y%m%d_%H%M%S')}.apkg"
         output_path = self.output_dir / filename
         
         self.logger.info(f"开始导出apkg文件: {filename}, 卡片数量: {len(cards)}, 模板: {template_name}")
@@ -471,7 +494,7 @@ class UnifiedExporter:
         self.logger.info(f"已导出 {len(cards)} 张卡片到: {output_path}")
         return str(output_path)
     
-    def export_to_apkg_with_custom_template(self, cards: List[CardData], template_name: str, filename: str = None) -> str:
+    def export_to_apkg_with_custom_template(self, cards: List[CardData], template_name: str, filename: str = None, timestamp: str = None) -> str:
         """使用自定义模板导出为apkg格式"""
         if not self.template_manager:
             raise ValueError("模板管理器未初始化")
@@ -480,7 +503,7 @@ class UnifiedExporter:
         if not template:
             raise ValueError(f"无法找到模板: {template_name}")
         
-        return self.export_to_apkg(cards, filename, template_name)
+        return self.export_to_apkg(cards, filename, template_name, timestamp)
     
     def _create_decks_from_cards(self, cards: List[CardData], template_name: str = None) -> List[Deck]:
         """从卡片创建牌组"""

@@ -1549,7 +1549,8 @@ class AnkiCardAssistant {
             'csv': { icon: 'fas fa-table', color: 'text-success', title: 'CSV表格' },
             'html': { icon: 'fas fa-file-code', color: 'text-warning', title: 'HTML文件' },
             'txt': { icon: 'fas fa-file-alt', color: 'text-secondary', title: '文本文件' },
-            'apkg': { icon: 'fas fa-download', color: 'text-danger', title: 'Anki包文件' }
+            'apkg': { icon: 'fas fa-download', color: 'text-danger', title: 'Anki包文件' },
+            'zip': { icon: 'fas fa-file-archive', color: 'text-primary', title: 'ZIP压缩包' }
         };
 
         try {
@@ -1769,7 +1770,8 @@ class AnkiCardAssistant {
             'csv': { name: 'CSV表格', icon: 'fas fa-table', color: 'btn-outline-success' },
             'html': { name: 'HTML文件', icon: 'fas fa-file-code', color: 'btn-outline-warning' },
             'txt': { name: '文本文件', icon: 'fas fa-file-alt', color: 'btn-outline-secondary' },
-            'apkg': { name: 'Anki包', icon: 'fas fa-download', color: 'btn-outline-danger' }
+            'apkg': { name: 'Anki包', icon: 'fas fa-download', color: 'btn-outline-danger' },
+            'zip': { name: 'ZIP压缩包', icon: 'fas fa-file-archive', color: 'btn-outline-primary' }
         };
 
         // 检查文件是否存在

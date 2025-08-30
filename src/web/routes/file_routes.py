@@ -145,39 +145,112 @@ class FileRoutes:
 
     def _create_download_archive(self, cards_data: List[Dict],
                                  deck_name: str, export_formats: List[str]):
-        """创建下载压缩包"""
-        zip_filename = ArchiveUtils.generate_archive_name()
+        """创建下载压缩包 - 修复版本：不创建新文件，只打包现有文件"""
         output_dir = Path(self.assistant.config["export"]["output_directory"])
+
+        # 查找output目录中最新的文件集
+        existing_files = self._find_latest_export_files(output_dir, export_formats)
+        
+        if not existing_files:
+            # 如果没有找到现有文件，说明可能是首次导出，需要生成文件
+            self.business_logic.logger.warning("未找到现有导出文件，将生成新文件")
+            return self._create_archive_with_new_files(cards_data, deck_name, export_formats)
+        
+        # 从现有文件中提取基础文件名（不带扩展名）
+        base_filename = self._extract_base_filename_from_files(existing_files)
+        if not base_filename:
+            # 如果无法提取基础文件名，使用新时间戳
+            base_filename = f"anki_cards_{DateTimeUtils.generate_timestamp()}"
+        
+        # 生成ZIP文件名，使用与原文件相同的基础名称
+        zip_filename = f"{base_filename}.zip"
         zip_path = output_dir / zip_filename
 
-        cards = self.business_logic.card_processor.convert_to_card_objects(cards_data, deck_name)
-        timestamp = DateTimeUtils.generate_timestamp()
-
+        # 使用现有文件创建压缩包
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            base_filename = f"anki_cards_{timestamp}"
+            for format_type, file_path in existing_files.items():
+                if Path(file_path).exists():
+                    # 保持原始文件名
+                    archive_name = Path(file_path).name
+                    zipf.write(file_path, archive_name)
+                    self.business_logic.logger.info("已添加现有文件到压缩包: %s -> %s", file_path, archive_name)
 
-            for format_type in export_formats:
-                try:
-                    if format_type == 'apkg':
-                        export_path = self.assistant.export_apkg(
-                            cards, f"{base_filename}.apkg"
-                        )
-                    else:
-                        export_path = self.assistant.export_cards(cards, [format_type])
-                        if format_type in export_path:
-                            export_path = export_path[format_type]
-                        else:
-                            continue
+        self.business_logic.logger.info("压缩包生成成功（使用现有文件）: %s", zip_path)
 
+        return {
+            'filename': zip_filename,
+            'file_path': str(zip_path),
+            'card_count': len(cards_data)
+        }
+
+    def _find_latest_export_files(self, output_dir: Path, export_formats: List[str]) -> Dict[str, str]:
+        """查找output目录中最新的导出文件"""
+        existing_files = {}
+        
+        if not output_dir.exists():
+            return existing_files
+        
+        # 为每种格式查找最新的文件
+        for format_type in export_formats:
+            pattern = f"anki_cards_*.{format_type}"
+            matching_files = list(output_dir.glob(pattern))
+            
+            if matching_files:
+                # 按修改时间排序，获取最新的文件
+                latest_file = max(matching_files, key=lambda f: f.stat().st_mtime)
+                existing_files[format_type] = str(latest_file)
+                self.business_logic.logger.info("找到%s格式的最新文件: %s", format_type, latest_file.name)
+        
+        return existing_files
+
+    def _extract_base_filename_from_files(self, existing_files: Dict[str, str]) -> str:
+        """从现有文件中提取基础文件名"""
+        if not existing_files:
+            return None
+        
+        # 取第一个文件来提取基础文件名
+        first_file_path = next(iter(existing_files.values()))
+        file_path = Path(first_file_path)
+        
+        # 提取不带扩展名的文件名
+        base_name = file_path.stem
+        self.business_logic.logger.info("提取的基础文件名: %s", base_name)
+        
+        return base_name
+
+    def _create_archive_with_new_files(self, cards_data: List[Dict], deck_name: str, 
+                                     export_formats: List[str]):
+        """当没有现有文件时，创建新文件并打包（保持原有逻辑作为后备）"""
+        output_dir = Path(self.assistant.config["export"]["output_directory"])
+        cards = self.business_logic.card_processor.convert_to_card_objects(cards_data, deck_name)
+        
+        # 使用统一的导出方法，确保所有格式使用相同的时间戳
+        try:
+            export_paths = self.assistant.export_cards(cards, export_formats)
+            
+            # 从生成的文件中提取基础文件名
+            if export_paths:
+                first_export_path = next(iter(export_paths.values()))
+                base_filename = Path(first_export_path).stem
+                zip_filename = f"{base_filename}.zip"
+                zip_path = output_dir / zip_filename
+            else:
+                # 如果没有生成任何文件，使用新时间戳
+                timestamp = DateTimeUtils.generate_timestamp()
+                zip_filename = f"anki_cards_{timestamp}.zip"
+                zip_path = output_dir / zip_filename
+            
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for format_type, export_path in export_paths.items():
                     if Path(export_path).exists():
                         zipf.write(export_path, Path(export_path).name)
-                        self.business_logic.logger.info("已添加文件到压缩包: %s", export_path)
+                        self.business_logic.logger.info("已添加新生成文件到压缩包: %s", export_path)
 
-                except (OSError, ValueError) as e:
-                    self.business_logic.logger.warning("生成%s格式文件失败: %s", format_type, e)
-                    continue
+        except Exception as e:
+            self.business_logic.logger.error("生成文件失败: %s", e)
+            raise
 
-        self.business_logic.logger.info("压缩包生成成功: %s", zip_path)
+        self.business_logic.logger.info("压缩包生成成功（使用新生成文件）: %s", zip_path)
 
         return {
             'filename': zip_filename,
